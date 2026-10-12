@@ -105,6 +105,35 @@ A separate static smoke test on the unannotated webcam image embedded in the ass
 `runs/validation-assignment-image/`. This verifies positive detections on the provided example;
 it is not a benchmark, a live sequence, or an independently labelled accuracy estimate.
 
+### Recorded-video verification
+
+To verify positive detections without depending on webcam lighting and availability, we added an
+offline video input to the same pipeline. The test clip is OpenCV's `vtest.avi`, pinned to the 4.12.0
+repository version [7], with SHA-256
+`45cddc9490be69345cbdab64ca583be65987e864ca408038e648db99e10516cf`.
+It contains 795 frames at 10 fps (79.5 seconds), with a decoded resolution of 768 × 576.
+
+We sampled at video positions 0, 5, 10, ..., 75 seconds, using the same YOLOv8n CPU detector,
+confidence threshold 0.5 and inference size 640. The clip ended normally after 16 observations.
+The resulting counts, in order, were:
+
+`3, 5, 6, 7, 7, 7, 6, 5, 3, 3, 4, 5, 6, 6, 8, 7`.
+
+![People detected over recorded video time](../runs/part1-recorded-video/people-over-time.png)
+
+![Three detected people in the first recorded-video sample](../runs/part1-recorded-video/annotated/000001.jpg)
+
+The first sample contains three clearly visible people, and the detector drew one box around each.
+This is a visual sanity check, not a dataset-wide accuracy measurement. Later frames contain more
+people, and the detected counts change over time. We have not independently labelled every sample.
+
+The CSV's `video_time_s` column records each requested sampling position. The graph uses that media
+timeline, while `timestamp_utc` records local acquisition during offline processing. No live-schedule
+lag is reported for the video test. The manifest identifies the input as `recorded_video_test` and
+records its source hash. These outputs are kept in `runs/part1-recorded-video/`, separate from live
+webcam evidence. A downloader script reproduces and verifies the test input without committing the
+video file to Git.
+
 ### Design decisions and problems
 
 - The example webcam was unreachable, requiring a documented replacement.
@@ -148,3 +177,5 @@ no architecture winner or accuracy claim can be established from the current loc
 5. Teaching team. `contador_personas.zip`, original local-processing and webpage example.
 6. Teaching team. *Azure documentation 1*, *Azure documentation 2* and
    *Azure Functions with Blob Storage and Event Grid*. Supplied supporting PDFs; cloud work pending.
+7. OpenCV. [Pedestrian sample video, vtest.avi, version 4.12.0](https://github.com/opencv/opencv/blob/4.12.0/samples/data/vtest.avi).
+   Accessed 12 October 2026.

@@ -3,6 +3,7 @@
 import argparse
 import csv
 import json
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -107,3 +108,35 @@ def test_run_never_overwrites_an_existing_experiment(tmp_path):
     settings.output.mkdir()
     with pytest.raises(FileExistsError):
         local.run(settings)
+
+
+def test_recorded_video_uses_media_time_and_stops_normally(tmp_path, monkeypatch):
+    monkeypatch.setattr(local, "PersonDetector", FakeDetector)
+    source = tmp_path / "test.avi"
+    source.write_bytes(b"test source for hashing")
+    positions = []
+
+    def read(source, position_s):
+        positions.append(position_s)
+        if position_s >= 10:
+            raise EOFError
+        return np.full((40, 60, 3), position_s, dtype=np.uint8)
+
+    def unexpected_sleep(seconds):
+        raise AssertionError("Offline video processing must not wait for live capture slots.")
+
+    monkeypatch.setattr(local, "capture_video_frame", read)
+    monkeypatch.setattr(local.time, "sleep", unexpected_sleep)
+    settings = replace(config(tmp_path, frames=60), source=str(source), source_kind="video")
+    output = local.run(settings)
+    with (output / "counts.csv").open(newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    assert positions == [0, 5, 10]
+    assert [float(row["video_time_s"]) for row in rows] == [0, 5]
+    assert all(row["schedule_lag_ms"] == "" for row in rows)
+    metadata = json.loads((output / "run.json").read_text())
+    assert metadata["input_type"] == "recorded_video_test"
+    assert metadata["status"] == "completed"
+    assert metadata["completion_reason"] == "end_of_video"
+    assert metadata["completed_frames"] == 2
+    assert (output / "people-over-time.png").is_file()

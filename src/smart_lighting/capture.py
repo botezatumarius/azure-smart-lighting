@@ -1,11 +1,35 @@
 """Acquire one fresh image per request without retaining a video backlog."""
 
 import logging
+import math
 import time
 from urllib.request import Request, urlopen
 
 import cv2
 import numpy as np
+
+
+def capture_video_frame(source: str, position_s: float) -> np.ndarray:
+    """Decode the recorded frame nearest a video time; EOF is normal completion."""
+    capture = cv2.VideoCapture(source)
+    try:
+        if not capture.isOpened():
+            raise OSError("Cannot open the recorded video.")
+        fps = capture.get(cv2.CAP_PROP_FPS)
+        frame_count = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+        if not math.isfinite(fps) or fps <= 0 or frame_count <= 0:
+            raise ValueError("The video must have a readable frame rate and frame count.")
+        frame_number = round(position_s * fps)
+        if frame_number >= frame_count:
+            raise EOFError("Reached the end of the recorded video.")
+        if not capture.set(cv2.CAP_PROP_POS_FRAMES, frame_number):
+            raise OSError("Cannot seek to the requested video position.")
+        success, frame = capture.read()
+        if not success or frame is None:
+            raise OSError("Cannot decode the requested video frame.")
+        return frame
+    finally:
+        capture.release()
 
 
 def capture_frame(source: str, kind: str, timeout: float = 10.0) -> np.ndarray:

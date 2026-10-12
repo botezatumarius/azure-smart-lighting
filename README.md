@@ -15,6 +15,31 @@ It counts people visible in each frame. It does not count unique visitors across
 The supplied PDFs and ZIP are preserved unchanged. The implementation follows the teaching team's
 `grabber.py` sequence, with corrected timing, CSV headers and explicit experiment records.
 
+## Test with a recorded video
+
+The project supports repeatable offline testing with OpenCV's pedestrian sample
+[`vtest.avi`](https://github.com/opencv/opencv/blob/4.12.0/samples/data/vtest.avi).
+The video is already downloaded on this computer. On a fresh checkout, download and verify it first:
+
+```powershell
+& .\.venv\Scripts\python.exe scripts/download_demo.py
+& .\.venv\Scripts\python.exe -m smart_lighting local --source data/vtest.avi --source-kind video --camera-id opencv-test
+```
+
+This uses the same detector and evidence pipeline as the webcam mode. It samples the video at
+0, 5, 10 seconds and so on, processing offline without waiting five real seconds per frame.
+It stops normally at the end of the clip or the requested `--frames` limit, whichever comes first.
+
+The verified run in `runs/part1-recorded-video/` contains **16 sampled frames**, with **3-8 people
+detected per frame**, a CSV, bounding-box images and a graph. Its manifest labels the source as
+`recorded_video_test` and records the source checksum. The graph uses seconds within the video;
+the separate UTC timestamps describe when this computer read each sample. These results demonstrate
+positive detections on recorded footage; live-camera assignment evidence remains separate.
+
+To test your own recording, replace `data/vtest.avi` with its file path, quoted if it contains spaces.
+Downloaded recordings and generated outputs are excluded from Git. The demo downloader pins the
+OpenCV 4.12.0 file and checks its SHA-256 before saving it.
+
 ## Run Part 1 on this computer
 
 The project environment is already installed in `.venv`. Open a PowerShell terminal in this folder:
@@ -41,7 +66,7 @@ Each run has its own directory under `runs/`:
 
 | Output | Purpose |
 |---|---|
-| `counts.csv` | UTC acquisition times, counts, resolution, timings and image hashes |
+| `counts.csv` | UTC acquisition times, counts, resolution, timings, hashes and optional video positions |
 | `people-over-time.png` | Report-ready time-series graph |
 | `raw/*.png` | Losslessly saved decoded input frames for inspection and later comparison |
 | `annotated/*.jpg` | People bounding boxes and confidence scores |
@@ -71,12 +96,13 @@ PyTorch index above when recreating that environment. Create a separate lock for
 
 ```powershell
 & .\.venv\Scripts\python.exe -m pytest -q
-& .\.venv\Scripts\python.exe -m ruff check src tests
+& .\.venv\Scripts\python.exe -m ruff check src tests scripts
 & .\.venv\Scripts\python.exe -m smart_lighting plot runs/part1-gaggenau-evening-retry/counts.csv
 ```
 
 Tests verify scheduling, zero-count recording, evidence creation, capture-failure handling and
-protection against overwriting an experiment. They do not measure model accuracy.
+protection against overwriting an experiment. They also check recorded-video sampling, normal
+end-of-video handling and separation of media time from live scheduling. They do not measure accuracy.
 
 The completed evening verification has 60 observations, a mean acquisition interval of 5.001 s,
 and a mean detector-call duration of 69.683 ms. All counts were zero in the low-light scene;

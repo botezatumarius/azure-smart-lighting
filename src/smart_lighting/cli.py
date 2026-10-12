@@ -26,8 +26,8 @@ def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description="Smart lighting: Part 1 local people counting")
     commands = root.add_subparsers(dest="command", required=True)
     local = commands.add_parser("local", help="Capture and count people, then save evidence")
-    local.add_argument("--source", required=True, help="Direct public stream or JPEG URL")
-    local.add_argument("--source-kind", choices=("stream", "snapshot"), default="stream")
+    local.add_argument("--source", required=True, help="Public webcam URL or local video path")
+    local.add_argument("--source-kind", choices=("stream", "snapshot", "video"), default="stream")
     local.add_argument("--camera-id", default="camera-01")
     local.add_argument("--frames", type=positive_int, default=60)
     local.add_argument("--interval", type=positive_float, default=5.0)
@@ -53,11 +53,19 @@ def main(argv: list[str] | None = None) -> int:
         else:
             if args.confidence > 1:
                 root.error("--confidence must be at most 1.")
-            source = urlsplit(args.source)
-            if source.scheme not in {"http", "https", "rtsp"} or not source.hostname:
-                root.error("--source must be a direct HTTP, HTTPS or RTSP webcam URL.")
-            if source.username or source.password:
-                root.error("Use a public webcam URL without embedded credentials.")
+            if args.source_kind == "video":
+                video = Path(args.source).resolve()
+                if not video.is_file():
+                    root.error(
+                        "--source must be an existing local video file for --source-kind video."
+                    )
+                args.source = str(video)
+            else:
+                source = urlsplit(args.source)
+                if source.scheme not in {"http", "https", "rtsp"} or not source.hostname:
+                    root.error("--source must be a direct HTTP, HTTPS or RTSP webcam URL.")
+                if source.username or source.password:
+                    root.error("Use a public webcam URL without embedded credentials.")
             from smart_lighting.local import RunConfig, run
 
             args.model.parent.mkdir(parents=True, exist_ok=True)

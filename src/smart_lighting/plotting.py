@@ -17,19 +17,27 @@ def plot_counts(csv_path: Path, output: Path) -> None:
         rows = list(csv.DictReader(stream))
     if not rows:
         raise ValueError("The CSV contains no observations to plot.")
-    times = [datetime.fromisoformat(row["timestamp_utc"]) for row in rows]
+    is_video = all(row.get("video_time_s", "") != "" for row in rows)
+    times = (
+        [float(row["video_time_s"]) for row in rows]
+        if is_video
+        else [datetime.fromisoformat(row["timestamp_utc"]) for row in rows]
+    )
     counts = [int(row["person_count"]) for row in rows]
     with plt.style.context("seaborn-v0_8-whitegrid"):
         figure, axes = plt.subplots(figsize=(10, 4.5), layout="constrained")
         axes.plot(times, counts, marker="o", markersize=3, color="#007f86", linewidth=1.5)
         axes.set(
-            title="People detected per frame", xlabel="Acquisition time (UTC)", ylabel="People"
+            title="People detected per frame" + (" (recorded video)" if is_video else ""),
+            xlabel="Position in recorded video (seconds)" if is_video else "Acquisition time (UTC)",
+            ylabel="People",
         )
         axes.set_ylim(0, max(1, max(counts) + 1))
         axes.yaxis.set_major_locator(MaxNLocator(integer=True))
-        locator = mdates.AutoDateLocator()
-        axes.xaxis.set_major_locator(locator)
-        axes.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator, tz=times[0].tzinfo))
+        if not is_video:
+            locator = mdates.AutoDateLocator()
+            axes.xaxis.set_major_locator(locator)
+            axes.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator, tz=times[0].tzinfo))
         output.parent.mkdir(parents=True, exist_ok=True)
         figure.savefig(output, dpi=180)
         plt.close(figure)

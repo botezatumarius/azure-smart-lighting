@@ -14,13 +14,14 @@ from pathlib import Path
 
 import cv2
 
-from smart_lighting.capture import capture_frame
+from smart_lighting.capture import capture_frame, capture_video_frame
 from smart_lighting.detection import PersonDetector
 from smart_lighting.plotting import plot_counts
 
 LOGGER = logging.getLogger(__name__)
 FIELDS = (
     "timestamp_utc",
+    "video_time_s",
     "camera_id",
     "frame_id",
     "person_count",
@@ -62,6 +63,7 @@ def run(config: RunConfig) -> Path:
     config.output.mkdir(parents=True, exist_ok=False)
     for name in ("raw", "annotated"):
         (config.output / name).mkdir()
+    is_video = config.source_kind == "video"
     metadata = {
         "config": {
             key: str(value) if isinstance(value, Path) else value
@@ -73,6 +75,8 @@ def run(config: RunConfig) -> Path:
         "versions": {name: version(name) for name in ("ultralytics", "torch", "opencv-python")},
         "status": "initialising",
         "completed_frames": 0,
+        "input_type": "recorded_video_test" if is_video else "live_webcam",
+        "sampling_clock": "video timeline (offline)" if is_video else "monotonic real time",
         "timestamp_definition": (
             "UTC at local frame acquisition completion; not camera exposure time"
         ),
@@ -83,12 +87,16 @@ def run(config: RunConfig) -> Path:
     manifest = config.output / "run.json"
     csv_path = config.output / "counts.csv"
     try:
+        if is_video:
+            with Path(config.source).open("rb") as video:
+                metadata["source_sha256"] = hashlib.file_digest(video, "sha256").hexdigest()
         detector = PersonDetector(config.model, config.confidence, config.image_size)
         detector.warm_up()
         metadata["model_sha256"] = hashlib.sha256(config.model.read_bytes()).hexdigest()
         metadata["status"] = "running"
         manifest.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
         slot = time.monotonic()
+        metadata["completion_reason"] = "frame_limit"
         previous_hash = None
         with (
             csv_path.open("w", newline="", encoding="utf-8") as stream,
@@ -98,9 +106,18 @@ def run(config: RunConfig) -> Path:
             writer.writeheader()
             stream.flush()
             for index in range(config.frames):
-                time.sleep(max(0, slot - time.monotonic()))
+                if not is_video:
+                    time.sleep(max(0, slot - time.monotonic()))
                 started = time.monotonic()
-                frame = capture_frame(config.source, config.source_kind)
+                video_time_s = index * config.interval if is_video else None
+                if is_video:
+                    try:
+                        frame = capture_video_frame(config.source, video_time_s)
+                    except EOFError:
+                        metadata["completion_reason"] = "end_of_video"
+                        break
+                else:
+                    frame = capture_frame(config.source, config.source_kind)
                 acquired = time.monotonic()
                 timestamp = datetime.now(UTC).isoformat(timespec="milliseconds")
                 result = detector.detect(frame)
@@ -109,7 +126,7 @@ def run(config: RunConfig) -> Path:
                 digest = hashlib.sha256(frame.tobytes()).hexdigest()
                 if digest == previous_hash:
                     LOGGER.warning(
-                        "Frame %s is identical to the previous image; check feed freshness.",
+                        "Frame %s is identical to the previous image.",
                         frame_id,
                     )
                 previous_hash = digest
@@ -122,6 +139,7 @@ def run(config: RunConfig) -> Path:
                         {
                             "frame_id": frame_id,
                             "timestamp_utc": timestamp,
+                            "video_time_s": video_time_s,
                             "boxes_xyxy": boxes.xyxy.cpu().tolist(),
                             "confidences": boxes.conf.cpu().tolist(),
                         }
@@ -133,6 +151,7 @@ def run(config: RunConfig) -> Path:
                 writer.writerow(
                     {
                         "timestamp_utc": timestamp,
+                        "video_time_s": video_time_s,
                         "camera_id": config.camera_id,
                         "frame_id": frame_id,
                         "person_count": count,
@@ -141,7 +160,7 @@ def run(config: RunConfig) -> Path:
                         "capture_ms": round((acquired - started) * 1000, 3),
                         "inference_ms": round((inferred - acquired) * 1000, 3),
                         "processing_ms": round((finished - started) * 1000, 3),
-                        "schedule_lag_ms": round((started - slot) * 1000, 3),
+                        "schedule_lag_ms": "" if is_video else round((started - slot) * 1000, 3),
                         "frame_sha256": digest,
                     }
                 )
@@ -153,12 +172,15 @@ def run(config: RunConfig) -> Path:
                     count,
                     (inferred - acquired) * 1000,
                 )
-                following = next_slot(slot, time.monotonic(), config.interval)
-                if following - slot > config.interval * 1.01:
-                    LOGGER.warning(
-                        "Processing exceeded the interval; missed capture slots were skipped."
-                    )
-                slot = following
+                if not is_video:
+                    following = next_slot(slot, time.monotonic(), config.interval)
+                    if following - slot > config.interval * 1.01:
+                        LOGGER.warning(
+                            "Processing exceeded the interval; missed capture slots were skipped."
+                        )
+                    slot = following
+        if not metadata["completed_frames"]:
+            raise ValueError("The source provided no observations to process.")
         plot_counts(csv_path, config.output / "people-over-time.png")
         metadata["status"] = "completed"
     except KeyboardInterrupt:

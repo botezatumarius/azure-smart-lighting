@@ -4,7 +4,6 @@ import csv
 import hashlib
 import json
 import logging
-import math
 import platform
 import time
 from dataclasses import asdict, dataclass
@@ -17,6 +16,7 @@ import cv2
 from smart_lighting.capture import capture_frame, capture_video_frame
 from smart_lighting.detection import PersonDetector
 from smart_lighting.plotting import plot_counts
+from smart_lighting.scheduling import next_slot
 
 LOGGER = logging.getLogger(__name__)
 FIELDS = (
@@ -46,11 +46,6 @@ class RunConfig:
     image_size: int
     model: Path
     output: Path
-
-
-def next_slot(current_slot: float, now: float, interval: float) -> float:
-    """Keep the original cadence; skip missed slots instead of creating a burst."""
-    return current_slot + max(1, math.ceil((now - current_slot) / interval)) * interval
 
 
 def save_image(path: Path, frame) -> None:

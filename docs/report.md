@@ -6,7 +6,7 @@ Course: Architectures and Infrastructures in AI
 
 Authors: To be completed by the student/group
 
-Date: 12 October 2026
+Date: 13 October 2026
 
 ## Introduction
 
@@ -147,10 +147,106 @@ video file to Git.
 - Low light and small/distant pedestrians can reduce effectiveness; manual review and daylight evidence
   are required before making claims about detection quality.
 
-## Tasks 2.1-2.5 - Azure virtual machine
+## Task 2.1 - Azure VM configuration
 
-Not implemented yet. Record configuration, image transport, VM detection, public results webpage,
-and measured effectiveness, RAM, CPU, bandwidth, cost and response time when this part is completed.
+**Deployment pending.** The VM service, Linux service definition and Nginx configuration are prepared
+in the repository. The student has not yet created an Azure VM. The deployment instructions are in
+`docs/part2-walkthrough.md`; Ubuntu 24.04 LTS x64 provides the required Python 3.12 environment.
+The service runs without root privileges and uses CPU-only PyTorch, one inference thread and one
+model instance. Actual Linux dependency versions must be captured after installation.
+
+The brief recommends Standard B1s, with 1 vCPU and 1 GiB RAM. Microsoft's current size documentation
+marks the Bv1 family as End of Life [8]. We must check student-subscription regions, size availability,
+remaining credit and displayed price before deployment. An affordable permitted current x64 size,
+such as B2ls v2 with 2 vCPUs and 4 GiB [9], may be substituted with the reason documented. No VM size,
+Azure cost or successful cloud deployment is claimed at this stage.
+
+## Task 2.2 - Local capture and image transport
+
+The `send` command reuses the Part 1 capture functions and cadence calculation, capturing locally
+and sending one JPEG every five seconds to the VM. YOLO does not run in the sender. JPEG quality
+defaults to 95, original image dimensions are retained, and the VM rejects uploads above 2 MB or
+4096 pixels in either dimension. Locally decoded inputs are also preserved as PNGs for inspection.
+
+HTTP upload requests travel inside an encrypted SSH tunnel. The inference service binds only to the
+VM's loopback address. The public web proxy cannot forward uploads. Frame IDs, acquisition UTC,
+camera ID, input type and optional recorded-video position accompany each upload. Client and VM
+CSV records share IDs and JPEG checksums, permitting verification of the exact received input.
+Acquisition UTC denotes capture completion, not camera exposure time.
+
+The sender schedules recorded-video replays in real time, unlike Part 1's offline video test.
+Missed capture slots are skipped and logged. Upload failures stop the client, preserve completed
+records and write an error row without a person count. Uploads are not automatically retried because
+a timeout may occur after the VM has already persisted the result.
+
+## Task 2.3 - Remote detection and CSV persistence
+
+The VM service calls the same `PersonDetector` used in Part 1: YOLOv8n, person class only, confidence
+0.5 and inference size 640 on CPU. It loads and warms the model before accepting requests.
+Ultralytics resets the CPU thread setting during backend initialisation, so the service applies the
+requested thread count after initialisation and in the inference worker. The manifest records it.
+
+The service preserves received JPEGs, annotated images and per-frame bounding-box/confidence JSON,
+and writes UTC timestamps, counts, dimensions, hashes, payload size and processing durations to
+`counts.csv`. One inference request and writer hold a lock at a time. Concurrent excess work is
+rejected with HTTP 429; duplicate frame IDs are rejected with HTTP 409. Invalid image data and
+metadata are not recorded as zero detections. Each service start creates a distinct experiment folder.
+
+## Task 2.4 - Results webpage
+
+The dashboard shows the latest person count, received frame count, annotated image, count histogram,
+time series, host CPU and process memory. Recorded inputs are explicitly identified. Charts show
+the latest 300 frames, while the downloadable CSV retains all observations in the service run.
+The page uses local assets without external JavaScript/chart dependencies and refreshes every five
+seconds. Refresh failures leave previously received values visible with an error message.
+
+The supplied Nginx configuration publishes only named read endpoints on port 80. The intended Azure
+rules expose HTTP 80 for the public-IP webpage and restrict SSH 22 to the student's IP. Inference
+port 8000 remains closed publicly. Browser rendering and refresh were verified locally; Nginx and
+public Azure IP access remain to be verified on the VM.
+
+![Local dashboard preview, not an Azure deployment](../runs/part2-local-client-verified/dashboard.png)
+
+## Task 2.5 - Measurements and local verification
+
+Resource monitoring samples process CPU/RSS and host CPU, memory and network counters every second
+after warm-up, including idle periods between frames. Client durations use a monotonic clock and
+include capture, JPEG encoding and the upload/response round trip. Server inference and processing
+times are measured independently. Clock differences between computers are not used to infer latency.
+Definitions and versions are preserved in run manifests.
+
+A **local functional test**, on the Windows computer rather than Azure, sent recorded-video positions
+0, 5 and 10 seconds to the loopback VM service at five-second wall-clock intervals. The service used
+one PyTorch inference thread. Its outputs are in `runs/part2-local-server-verified/`, with client
+evidence in `runs/part2-local-client-verified/`. The model hash matches Part 1's model.
+
+| Local functional check | Observed result |
+|---|---:|
+| Successfully received observations | 3 |
+| Detected people, in order | 3, 5, 6 |
+| Transferred JPEG bytes | 430,137 |
+| Client/VM payload hashes | All three match |
+| Mean HTTP upload/response duration | 281.333 ms |
+| Mean detector-call duration | 208.333 ms |
+| Mean capture-to-response duration | 364.667 ms |
+| Maximum sampled process RSS in the processing window | 442,093,568 bytes, about 421.6 MiB |
+
+These values establish transport, positive detections, evidence generation and dashboard operation.
+They are not cloud performance, capacity or accuracy estimates. Three observations are insufficient
+for meaningful tail-latency claims, and host CPU reflects other applications on the computer.
+One-second samples can miss brief memory/CPU peaks and exclude startup before monitoring begins.
+
+The analysis script joins client/VM records, checks payload hashes, creates a report graph and prepares
+a blank manual-count template. With independent labels, it calculates mean absolute count error and
+exact-count agreement, reporting labelled-frame coverage. These count metrics do not establish
+bounding-box precision or recall. JPEG payload totals exclude protocol/encryption overhead, while
+host network counters include all interfaces and other traffic.
+
+**Still required on Azure:** configuration screenshots, a representative live webcam experiment,
+public-IP verification, independent labels, CPU/RAM/bandwidth measurements, meaningful response-time
+statistics and Cost Management usage for the VM, disk and public IP. B-series CPU credit state and
+experiment duration must be recorded. Student-credit usage is still monetary cost [10]. The report
+must interpret these measurements before Part 2 can be considered complete.
 
 ## Tasks 3.1-3.6 - Serverless and Azure AI
 
@@ -179,3 +275,9 @@ no architecture winner or accuracy claim can be established from the current loc
    *Azure Functions with Blob Storage and Event Grid*. Supplied supporting PDFs; cloud work pending.
 7. OpenCV. [Pedestrian sample video, vtest.avi, version 4.12.0](https://github.com/opencv/opencv/blob/4.12.0/samples/data/vtest.avi).
    Accessed 12 October 2026.
+8. Microsoft. [Bv1 sizes series](https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/general-purpose/bv1-series).
+   Accessed 13 October 2026.
+9. Microsoft. [Bsv2 sizes series](https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/general-purpose/bsv2-series).
+   Accessed 13 October 2026.
+10. Microsoft. [Plan and manage VM costs](https://learn.microsoft.com/en-us/azure/virtual-machines/cost-optimization-plan-to-manage-costs).
+    Accessed 13 October 2026.

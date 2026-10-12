@@ -1,7 +1,8 @@
 # Smart Lighting System
 
 Practical assignment for **Architectures and Infrastructures in AI**.
-Part 1 is implemented; cloud resources and Parts 2-4 have not been created.
+Part 1 is implemented. Part 2's sender, VM service and dashboard are implemented and tested locally;
+Azure deployment and cloud measurements are pending. Parts 3-4 have not been started.
 
 The pipeline is small: **public webcam → capture every 5 seconds → YOLOv8 → CSV + images + graph**.
 It counts people visible in each frame. It does not count unique visitors across frames.
@@ -10,7 +11,8 @@ It counts people visible in each frame. It does not count unique visitors across
 
 1. Read [the assignment analysis](docs/assignment-analysis.md).
 2. Follow [the Part 1 walkthrough](docs/part1-walkthrough.md).
-3. Maintain [the working report](docs/report.md) as experiments are completed.
+3. Follow [the Part 2 walkthrough](docs/part2-walkthrough.md) for Azure VM creation and testing.
+4. Maintain [the working report](docs/report.md) as experiments are completed.
 
 The supplied PDFs and ZIP are preserved unchanged. The implementation follows the teaching team's
 `grabber.py` sequence, with corrected timing, CSV headers and explicit experiment records.
@@ -84,7 +86,7 @@ installation and provides a useful baseline for the later CPU VM comparison.
 ```powershell
 python -m venv .venv
 & .\.venv\Scripts\python.exe -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-& .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+& .\.venv\Scripts\python.exe -m pip install -e ".[vm,dev]"
 ```
 
 `models/yolov8n.pt` downloads from Ultralytics on the first run. Model loading and a warm-up inference
@@ -102,7 +104,32 @@ PyTorch index above when recreating that environment. Create a separate lock for
 
 Tests verify scheduling, zero-count recording, evidence creation, capture-failure handling and
 protection against overwriting an experiment. They also check recorded-video sampling, normal
-end-of-video handling and separation of media time from live scheduling. They do not measure accuracy.
+end-of-video handling, HTTP uploads, duplicate rejection, invalid images/metadata, overload rejection
+and transport failures. They do not measure accuracy.
+
+## Preview Part 2 on this computer
+
+Start the detector in one PowerShell terminal:
+
+```powershell
+& .\.venv\Scripts\python.exe -m smart_lighting serve
+```
+
+In a second terminal, send three frames from the recorded video:
+
+```powershell
+& .\.venv\Scripts\python.exe -m smart_lighting send --source data/vtest.avi --source-kind video --camera-id opencv-test --frames 3
+```
+
+Open <http://127.0.0.1:8000/> to see the dashboard. Frames are sent five seconds apart, so this test
+takes approximately ten seconds after the service is ready. Stop the server with Ctrl+C.
+For an Azure deployment, the same commands run on separate machines and uploads go through SSH.
+Follow the [Part 2 walkthrough](docs/part2-walkthrough.md) for the exact steps and public webpage.
+
+The server saves `counts.csv`, `resources.csv`, received raw JPEGs, annotated images, detection JSON
+and `run.json` in `runs/vm-.../`. The sender saves `client.csv`, raw PNGs and its own `run.json` in a
+separate local run directory. `scripts/analyze_vm.py VM_RUN CLIENT_RUN` checks matching evidence,
+summarises measurements and prepares a manual-count template. Generated evidence stays out of Git.
 
 The completed evening verification has 60 observations, a mean acquisition interval of 5.001 s,
 and a mean detector-call duration of 69.683 ms. All counts were zero in the low-light scene;
@@ -116,8 +143,14 @@ src/smart_lighting/
   capture.py     one image from a stream or snapshot endpoint
   detection.py   reusable YOLOv8 person detector
   local.py       scheduling and evidence collection
+  scheduling.py  shared cadence calculation
+  sender.py      local capture and private HTTP uploads
+  vm.py          VM detector, persistence and read API
+  metrics.py     CPU, memory and host network sampling
+  web/           dashboard, time series and count histogram
   plotting.py    CSV-to-graph rendering
   cli.py         command-line arguments and errors
 ```
 
-No cloud dependencies or speculative framework are introduced before the corresponding part.
+`deploy/` contains the Nginx configuration and Linux service. VM dependencies are installed with
+the `vm` extra. No serverless infrastructure is included before Part 3.

@@ -10,13 +10,17 @@ requires-python = ">=3.11,<3.14"
 dependencies = ["ultralytics==8.4.175", "matplotlib==3.11.2"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "ruff>=0.14,<1"]
+vm = ["fastapi>=0.115,<1", "uvicorn>=0.34,<1", "psutil>=7,<8", "pillow>=12,<13"]
+dev = ["pytest>=8,<10", "ruff>=0.14,<1", "httpx>=0.28,<1"]
 
 [project.scripts]
 smart-lighting = "smart_lighting.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+smart_lighting = ["web/*.html", "web/*.js"]
 
 [tool.ruff]
 line-length = 100

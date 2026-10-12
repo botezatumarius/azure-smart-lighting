@@ -21,7 +21,9 @@ def plot_counts(csv_path: Path, output: Path) -> None:
     times = (
         [float(row["video_time_s"]) for row in rows]
         if is_video
-        else [datetime.fromisoformat(row["timestamp_utc"]) for row in rows]
+        else [
+            datetime.fromisoformat(row.get("timestamp_utc") or row["captured_utc"]) for row in rows
+        ]
     )
     counts = [int(row["person_count"]) for row in rows]
     with plt.style.context("seaborn-v0_8-whitegrid"):

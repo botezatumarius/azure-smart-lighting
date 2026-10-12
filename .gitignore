@@ -2,6 +2,8 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+build/
+dist/
 .pytest_cache/
 .ruff_cache/
 tmp/
@@ -10,6 +12,11 @@ models/
 data/
 .env
 local.settings.json
+*.pem
+*.key
+*.pfx
+*.p12
+requirements-lock.linux.txt
 
 # Supplied course materials stay local.
 /assessment_criteria_practice_1.pdf

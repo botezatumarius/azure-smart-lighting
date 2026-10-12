@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+tmp/
+runs/
+models/
+.env
+local.settings.json
+
+# Supplied course materials stay local.
+/assessment_criteria_practice_1.pdf
+/Azure documentation 1.pdf
+/Azure documentation 2.pdf
+/Azure documentation 3 Blob Trigger.pdf
+/Practice1.pdf
+/contador_personas.zip
+/contador_personas/

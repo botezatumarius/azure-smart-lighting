@@ -1,4 +1,4 @@
-"""Store people counts in a CSV file and plot them over time."""
+"""Store results in CSV files and plot people counts over time."""
 
 import csv
 from datetime import datetime
@@ -11,25 +11,32 @@ import matplotlib.dates as mdates  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.ticker import MaxNLocator  # noqa: E402
 
-FIELDS = ("timestamp", "camera", "people", "inference_ms")
+COUNT_FIELDS = ("timestamp", "camera", "people", "inference_ms")
 
 
-class CountLog:
-    """Append-only CSV of people counts; one row per processed frame."""
+class CsvLog:
+    """Append-only CSV file; the header is written once, when the file is created."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, fields: tuple[str, ...]):
         self.path = path
+        self.fields = fields
         if not path.exists():
-            self._write(FIELDS, mode="w")
+            self._write(dict(zip(fields, fields, strict=True)), mode="w")
 
-    def append(self, timestamp: datetime, camera: str, people: int, inference_ms: float) -> None:
-        self._write(
-            (timestamp.isoformat(timespec="seconds"), camera, people, round(inference_ms, 1))
-        )
+    def append(self, **row) -> None:
+        self._write({key: _format(value) for key, value in row.items()})
 
-    def _write(self, row: tuple, mode: str = "a") -> None:
+    def _write(self, row: dict, mode: str = "a") -> None:
         with self.path.open(mode, newline="", encoding="utf-8") as file:
-            csv.writer(file).writerow(row)
+            csv.DictWriter(file, self.fields).writerow(row)
+
+
+def _format(value):
+    if isinstance(value, datetime):
+        return value.isoformat(timespec="seconds")
+    if isinstance(value, float):
+        return round(value, 1)
+    return value
 
 
 def plot_counts(csv_path: Path, output: Path) -> None:

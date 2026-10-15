@@ -37,7 +37,8 @@ so we picked a replacement that meets the requirements:
 ### Task 1.2 — Capturing one frame every 5 seconds
 
 `camera.read_frame()` uses OpenCV to open the camera URL, read one frame and close the
-connection. Design decisions:
+connection. `camera.capture()` calls it on a fixed schedule and yields timestamped frames; this
+is the capture process that Parts 2 and 3 reuse. Design decisions:
 
 - **A new connection for each frame.** A stream that stays open buffers frames while the
   model is busy, so the next frame read would be seconds old. Reconnecting always returns the
@@ -67,7 +68,7 @@ CPU-only machines and later to a small VM). For each frame it:
 The model is loaded once and warmed up with a blank image, so the first real frame's time is
 not inflated by initialisation. The same class runs unchanged on the VM in Part 2.
 
-`results.CountLog` appends one row per frame to `counts.csv`, and `results.plot_counts` draws
+`results.CsvLog` appends one row per frame to `counts.csv`, and `results.plot_counts` draws
 the time-series graph:
 
 ```csv
@@ -82,7 +83,7 @@ cameras in Part 4.
 
 *[Sample of `counts.csv`, two annotated frames and `people-over-time.png` from the daytime run.]*
 
-**Verification.** Five automated tests (`pytest`) check the capture loop, skipping of failed
+**Verification.** Automated tests (`pytest`) check the processing loop, skipping of failed
 frames, the CSV format and the graph. They use a fake detector and camera, so they run in
 seconds. We confirmed the detector on real footage with people (OpenCV's `vtest.avi`
 pedestrian clip: 6 of 6 people found) and ran the full pipeline on the live camera.
@@ -97,7 +98,87 @@ pedestrian clip: 6 of 6 people found) and ran the full pipeline on the live came
 
 ## 3. Part 2: Azure virtual machine
 
-*To do.*
+In this part the laptop only captures frames; detection moves to a VM in Azure
+(Infrastructure as a Service: we rent the machine and manage everything on it).
+
+```text
+laptop: sender.py ──JPEG + token──▶ VM: vm.py ─┬─ YOLOv8 → counts.csv, annotated frames
+                                               ├─ monitor.py → resources.csv (CPU, RAM, network)
+                                               └─ dashboard: histogram, time series, latest frame
+```
+
+### Task 2.1 — Creating and configuring the VM
+
+| Setting | Value | Reason |
+|---|---|---|
+| Size | Standard_B1s: 1 vCPU, 1 GiB RAM | Recommended by the assignment; 750 free hours per month with Azure for Students |
+| Image | Ubuntu Server 24.04 LTS | Long-term support; ships Python 3.12 |
+| Region | *[region used]* | Close to the laptop, for low latency |
+| Inbound ports | 22 (SSH), 80 (HTTP) | Administration and the public dashboard |
+| Authentication | SSH key, no password | Cannot be guessed by brute force |
+
+*[📸 VM overview and inbound port rules.]*
+
+`deploy/setup.sh` makes the setup repeatable instead of a list of manual commands. It:
+
+1. installs the required packages `python3-opencv` and `python3-pip` (plus `python3-venv`);
+2. adds a 2 GiB swap file. With 1 GiB of RAM, installing PyTorch and loading the model can
+   exhaust memory, and Linux then kills the process (the "killed" error in the assignment's
+   note 2). Swap lets the system move rarely used memory to disk;
+3. installs the CPU-only build of PyTorch and the project in a virtual environment, with
+   `--no-cache-dir` (assignment note 2). Ubuntu 24.04 does not allow `pip` to install
+   system-wide, and a virtual environment keeps the project isolated;
+4. creates a random upload token in `/etc/smart-lighting.env`, readable only by root;
+5. installs a **systemd** service. The service starts at boot, restarts on failure, and runs as
+   a normal user rather than root. It is still allowed to use port 80
+   (`CAP_NET_BIND_SERVICE`).
+
+### Task 2.2 — Sending frames from the laptop
+
+`sender.py` reuses the Task 1.2 capture loop (`camera.capture`). Each frame is compressed to
+JPEG (quality 90, ≈110 kB for a 1280 × 720 frame) and sent in an HTTP `POST /frames` request.
+The VM answers with the people count. The sender logs each answer together with the
+**round-trip time** and the **bytes sent**; these are the data for Task 2.5.
+
+Design decisions:
+
+- **HTTP with a JPEG body.** HTTP is simple and passes through firewalls, and the same request
+  works for any number of cameras in Part 4. JPEG is about 25× smaller than the raw frame.
+- **Shared-secret token.** Port 80 is public because of the dashboard, so the upload endpoint
+  requires an `X-API-Key` header. Without it, anyone on the internet could inject frames.
+  (HTTPS would also encrypt the token; we left it out to keep the practice focused, since the
+  frames come from a public camera.)
+
+### Task 2.3 — Counting people on the VM
+
+`vm.py` is a small **FastAPI** web service. For each uploaded frame it:
+
+1. checks the token, and checks that the body is a valid image;
+2. runs **the same `PersonDetector` as Part 1** (YOLOv8n, class *person*, confidence ≥ 0.5),
+   so local and cloud results are directly comparable;
+3. saves the annotated frame and appends a row to `counts.csv`, in the same format as Part 1.
+
+The detector runs one frame at a time (a lock). The B1s has a single vCPU, so running frames in
+parallel would not be faster and would use more memory. Extra frames wait in line, and that
+waiting shows up in the response time. This is the effect we measure in Part 4.
+
+*[📸 `counts.csv` on the VM.]*
+
+### Task 2.4 — Results website
+
+The same service serves a dashboard at `http://<public-ip>/`, refreshed every 5 seconds:
+
+- a **histogram** of people per frame (how often 0, 1, 2 … people were seen);
+- people over time, and the latest annotated frame;
+- frames processed, mean people, mean inference time, and the VM's current CPU, memory and
+  network use.
+
+*[📸 dashboard opened through the public IP.]*
+
+### Task 2.5 — Performance
+
+*[To do after the Azure run: detection effectiveness, CPU, memory, bandwidth, cost and response
+time, from `sent.csv`, `resources.csv` and Azure Monitor.]*
 
 ## 4. Part 3: Serverless and Azure AI
 

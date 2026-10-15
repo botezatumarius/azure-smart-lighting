@@ -1,0 +1,16 @@
+[Unit]
+Description=Smart Lighting people counter and dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=@USER@
+WorkingDirectory=@DIR@
+EnvironmentFile=/etc/smart-lighting.env
+ExecStart=@DIR@/.venv/bin/python -m smart_lighting.vm --port 80
+# Port 80 without root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

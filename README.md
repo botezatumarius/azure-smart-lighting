@@ -6,7 +6,7 @@ frames with YOLOv8, first locally and then on Azure.
 | Part | Status |
 |---|---|
 | 1 · Local processing | Done |
-| 2 · Azure virtual machine | To do |
+| 2 · Azure virtual machine | Code done; Azure deployment pending |
 | 3 · Serverless and Azure AI | To do |
 | 4 · Multi-camera management | To do |
 
@@ -41,6 +41,34 @@ This takes one frame from the camera every 5 seconds, counts the people in it an
 Omit `--frames` to run until **Ctrl+C**. Repeated runs append to the same CSV.
 Cameras are listed in `CAMERAS` in `src/smart_lighting/camera.py`.
 
+## Part 2: count people on an Azure VM
+
+The laptop captures frames and sends them over HTTP to a service on the VM. The service counts
+people with the same YOLOv8 detector, keeps the results in CSV files and serves a public
+dashboard at `http://<public-ip>/`.
+
+```text
+laptop: sender.py ──JPEG + token──▶ VM: vm.py ─┬─ YOLOv8 → counts.csv, annotated frames
+                                               ├─ monitor.py → resources.csv (CPU, RAM, network)
+                                               └─ dashboard: histogram, time series, latest frame
+```
+
+Follow [docs/azure-vm.md](docs/azure-vm.md) to create the VM and deploy. Then:
+
+```powershell
+$env:SMART_LIGHTING_TOKEN = "<token>"
+.venv\Scripts\python -m smart_lighting.sender --server http://<public-ip> --frames 60
+```
+
+The sender logs the round-trip time and upload size of each frame in `runs/sent-<camera>/sent.csv`.
+
+To try the service on this computer, start it in one terminal and send frames from another
+using `--server http://127.0.0.1:8000`:
+
+```powershell
+$env:SMART_LIGHTING_TOKEN = "test"; .venv\Scripts\python -m smart_lighting.vm
+```
+
 ## Development
 
 ```powershell
@@ -52,9 +80,14 @@ Cameras are listed in `CAMERAS` in `src/smart_lighting/camera.py`.
 
 ```text
 src/smart_lighting/
-  camera.py     camera list and single-frame capture
-  detector.py   YOLOv8 person detector (reused on the VM in Part 2)
-  results.py    CSV log and time-series graph
-  local.py      Part 1: capture → detect → save loop
-docs/report.md  project report draft
+  camera.py     camera list, 5-second capture loop (Task 1.2), JPEG encoding
+  detector.py   YOLOv8 person detector, shared by laptop and VM
+  results.py    CSV logs and time-series graph
+  local.py      Part 1: capture → detect → save
+  sender.py     Part 2: capture → send to VM
+  vm.py         Part 2: VM web service (upload API + dashboard)
+  monitor.py    Part 2: CPU, memory and network sampling on the VM
+  web/          dashboard page
+deploy/         VM setup script and systemd service
+docs/           report draft and Azure guide
 ```

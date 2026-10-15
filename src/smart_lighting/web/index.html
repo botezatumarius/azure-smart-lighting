@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smart Lighting</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0 auto; padding: 16px; max-width: 1100px;
+           background: #f6f7f9; color: #1d2433; }
+    h1 { margin: 0 0 4px; }
+    .muted { color: #667085; }
+    .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    .card { background: #fff; border-radius: 8px; padding: 12px 16px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+    .value { font-size: 1.6rem; font-weight: 600; }
+    .charts { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+              margin-top: 12px; }
+    img { width: 100%; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Smart Lighting: people detection</h1>
+  <p class="muted">YOLOv8 on an Azure VM · updates every 5 s ·
+    <a href="counts.csv">download counts.csv</a></p>
+
+  <section class="grid">
+    <div class="card"><div class="muted">Frames processed</div><div class="value" id="frames">–</div></div>
+    <div class="card"><div class="muted">People now</div><div class="value" id="people">–</div></div>
+    <div class="card"><div class="muted">Mean people</div><div class="value" id="mean">–</div></div>
+    <div class="card"><div class="muted">Mean inference</div><div class="value" id="inference">–</div></div>
+    <div class="card"><div class="muted">CPU</div><div class="value" id="cpu">–</div></div>
+    <div class="card"><div class="muted">Memory</div><div class="value" id="memory">–</div></div>
+    <div class="card"><div class="muted">Network in</div><div class="value" id="network">–</div></div>
+  </section>
+
+  <section class="charts">
+    <div class="card"><h3>Histogram: people per frame</h3><canvas id="histogram"></canvas></div>
+    <div class="card"><h3>People over time</h3><canvas id="timeline"></canvas></div>
+    <div class="card"><h3>Latest frame</h3><img id="latest" alt="Latest annotated frame"></div>
+  </section>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

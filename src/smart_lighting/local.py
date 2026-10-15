@@ -1,51 +1,42 @@
 """Part 1: capture a webcam frame every few seconds and count people locally."""
 
 import argparse
-import itertools
 import logging
-import time
-from collections.abc import Callable
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
 import cv2
 import numpy as np
 
-from smart_lighting.camera import CAMERAS, read_frame
+from smart_lighting.camera import CAMERAS, capture
 from smart_lighting.detector import PersonDetector
-from smart_lighting.results import CountLog, plot_counts
+from smart_lighting.results import COUNT_FIELDS, CsvLog, plot_counts
 
 log = logging.getLogger(__name__)
 
 
 def run(
-    read: Callable[[], np.ndarray],
+    frames: Iterable[tuple[datetime, np.ndarray]],
     detector: PersonDetector,
     camera: str,
     output: Path,
-    interval: float,
-    frames: int | None = None,
 ) -> None:
-    """Process one frame per interval until `frames` are done or Ctrl+C is pressed."""
+    """Count people in each frame and save the annotated image, CSV row and graph."""
     images = output / "frames"
     images.mkdir(parents=True, exist_ok=True)
-    counts = CountLog(output / "counts.csv")
+    counts = CsvLog(output / "counts.csv", COUNT_FIELDS)
     processed = 0
-    next_capture = time.monotonic()
     try:
-        for _ in range(frames) if frames else itertools.count():
-            time.sleep(max(0.0, next_capture - time.monotonic()))
-            # Fixed cadence.
-            next_capture = max(next_capture, time.monotonic()) + interval
-            try:
-                frame = read()
-            except ConnectionError as error:
-                log.warning("%s; skipping this frame", error)
-                continue
-            timestamp = datetime.now().astimezone()
+        for timestamp, frame in frames:
             detection = detector.detect(frame)
             cv2.imwrite(str(images / f"{timestamp:%Y%m%d-%H%M%S}.jpg"), detection.annotated)
-            counts.append(timestamp, camera, detection.people, detection.inference_ms)
+            counts.append(
+                timestamp=timestamp,
+                camera=camera,
+                people=detection.people,
+                inference_ms=detection.inference_ms,
+            )
             processed += 1
             log.info("%s: %d people (%.0f ms)", camera, detection.people, detection.inference_ms)
     finally:
@@ -65,12 +56,10 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
     try:
         run(
-            lambda: read_frame(CAMERAS[args.camera]),
+            capture(CAMERAS[args.camera], args.interval, args.frames),
             PersonDetector(),
             args.camera,
             args.output or Path("runs") / args.camera,
-            args.interval,
-            args.frames,
         )
     except KeyboardInterrupt:
         log.info("Stopped by user")

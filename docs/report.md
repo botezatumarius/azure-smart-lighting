@@ -1,5 +1,9 @@
 # Practice 1: Cloud Computing Services — Project Report
 
+**Course:** Architectures and Infrastructures for Artificial Intelligence  
+**Authors:** *[group members]*  
+**Date:** *[submission date]*
+
 ## 1. Introduction
 
 A Smart Lighting System (SLS) switches street lights on and off depending on whether people
@@ -32,7 +36,9 @@ so we picked a replacement that meets the requirements:
 - **Access:** a public JPEG endpoint (`https://www.gaggenau.de/webcam/image00001.jpg`),
   1280 × 720 pixels, which the city refreshes every 5 seconds. This matches Task 1.2's rate.
 
-*[Screenshot: a raw daytime frame from the camera.]*
+![Raw frame from the Gaggenau market-square camera](images/part1-camera.jpg)
+
+*Figure: a raw 1280 × 720 frame from the camera.*
 
 ### Task 1.2 — Capturing one frame every 5 seconds
 
@@ -81,7 +87,15 @@ The timestamps include the UTC offset, so they remain unambiguous when compared 
 VM (Part 2), which runs on UTC. The `camera` column lets the same file and graph hold several
 cameras in Part 4.
 
-*[Sample of `counts.csv`, two annotated frames and `people-over-time.png` from the daytime run.]*
+*[Sample of `counts.csv` from the daytime run.]*
+
+![Frame with detected people](images/part1-detections.jpg)
+
+*Figure: a frame annotated by YOLOv8; each box is one detected person with its confidence.*
+
+![People per frame over time](images/part1-graph.png)
+
+*Figure: people detected per frame during the daytime run. [Explain the trend.]*
 
 **Verification.** Automated tests (`pytest`) check the processing loop, skipping of failed
 frames, the CSV format and the graph. They use a fake detector and camera, so they run in
@@ -117,7 +131,17 @@ laptop: sender.py ──JPEG + token──▶ VM: vm.py ─┬─ YOLOv8 → cou
 | Inbound ports | 22 (SSH), 80 (HTTP) | Administration and the public dashboard |
 | Authentication | SSH key, no password | Cannot be guessed by brute force |
 
-*[📸 VM overview and inbound port rules.]*
+![VM overview](images/part2-vm-overview.png)
+
+*Figure: the VM in the Azure Portal (size, image, public IP).*
+
+![Inbound port rules](images/part2-vm-ports.png)
+
+*Figure: inbound rules: only SSH (22) and HTTP (80) are open.*
+
+![Service status on the VM](images/part2-vm-service.png)
+
+*Figure: the service running on the VM, with memory and swap.*
 
 `deploy/setup.sh` makes the setup repeatable instead of a list of manual commands. It:
 
@@ -162,7 +186,13 @@ The detector runs one frame at a time (a lock). The B1s has a single vCPU, so ru
 parallel would not be faster and would use more memory. Extra frames wait in line, and that
 waiting shows up in the response time. This is the effect we measure in Part 4.
 
-*[📸 `counts.csv` on the VM.]*
+![Sender output](images/part2-sender.png)
+
+*Figure: the laptop sending frames and receiving the counts.*
+
+![CSV on the VM](images/part2-vm-csv.png)
+
+*Figure: `counts.csv` written on the VM.*
 
 ### Task 2.4 — Results website
 
@@ -173,7 +203,9 @@ The same service serves a dashboard at `http://<public-ip>/`, refreshed every 5 
 - frames processed, mean people, mean inference time, and the VM's current CPU, memory and
   network use.
 
-*[📸 dashboard opened through the public IP.]*
+![Dashboard](images/part2-dashboard.png)
+
+*Figure: the dashboard opened through the VM's public IP.*
 
 ### Task 2.5 — Performance
 

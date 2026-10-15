@@ -1,28 +1,25 @@
+# Python
 .venv/
 __pycache__/
-*.py[cod]
 *.egg-info/
 build/
-dist/
 .pytest_cache/
 .ruff_cache/
-tmp/
-runs/
+
+# Model weights and generated results
 models/
+*.pt
+runs/
 data/
+tmp/
+
+# Secrets
 .env
 local.settings.json
 *.pem
 *.key
-*.pfx
-*.p12
-requirements-lock.linux.txt
 
-# Supplied course materials stay local.
-/assessment_criteria_practice_1.pdf
-/Azure documentation 1.pdf
-/Azure documentation 2.pdf
-/Azure documentation 3 Blob Trigger.pdf
-/Practice1.pdf
+# Supplied course materials stay local
+/*.pdf
 /contador_personas.zip
 /contador_personas/

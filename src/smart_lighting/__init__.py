@@ -1,1 +1,1 @@
-"""Smart lighting assignment: reusable capture, detection and reporting components."""
+"""Smart Lighting System: count people in public webcam frames."""

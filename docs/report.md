@@ -58,8 +58,19 @@ is the capture process that Parts 2 and 3 reuse. Design decisions:
   `sleep(5)` after each frame would add the processing time to every interval and make the
   timing drift.
 
-Resolution: the camera delivers 1280 × 720. YOLOv8 resizes frames to 640 px internally, and at
-that size people in the square are large enough to detect.
+**Resolution.** The camera delivers 1280 × 720 frames. By default YOLOv8 shrinks every frame
+to 640 px before detection. On this wide view a person is then only about 10 px tall, and most
+are missed. We compared both sizes on the same frame, which had 8 people visible:
+
+| Detection size | People found (of 8) | Run of 5 min: mean people per frame |
+|---|---|---|
+| 640 px (YOLO default) | 2 | 0.67 |
+| **1280 px (native)** | **7** | **2.56** |
+
+Detecting at the native 1280 px finds 3–4 times more people, so all parts use 1280 px. This
+makes inference slower (≈400 ms instead of ≈160 ms per frame on the laptop), which is still far
+below the 5-second interval. The camera's resolution is therefore sufficient, provided the model
+is not given a smaller copy of it.
 
 ### Task 1.3 — Counting people with YOLOv8
 
@@ -79,23 +90,32 @@ the time-series graph:
 
 ```csv
 timestamp,camera,people,inference_ms
-2026-10-15T19:39:55+02:00,gaggenau,0,148.9
-2026-10-15T19:40:00+02:00,gaggenau,0,61.2
+2026-10-16T14:23:35+02:00,gaggenau,1,440.9
+2026-10-16T14:23:40+02:00,gaggenau,0,399.4
+2026-10-16T14:23:45+02:00,gaggenau,1,405.5
+2026-10-16T14:23:49+02:00,gaggenau,2,353.5
+2026-10-16T14:23:55+02:00,gaggenau,0,431.3
 ```
 
 The timestamps include the UTC offset, so they remain unambiguous when compared with the cloud
 VM (Part 2), which runs on UTC. The `camera` column lets the same file and graph hold several
 cameras in Part 4.
 
-*[Sample of `counts.csv` from the daytime run.]*
-
 ![Frame with detected people](images/part1-detections.jpg)
 
-*Figure: a frame annotated by YOLOv8; each box is one detected person with its confidence.*
+*Figure: a frame annotated by YOLOv8 (14:27:25, 9 people detected). Each box is one detected
+person with its confidence. Two people are missed: one between the café tables, partly hidden,
+and one at the right edge.*
 
 ![People per frame over time](images/part1-graph.png)
 
-*Figure: people detected per frame during the daytime run. [Explain the trend.]*
+*Figure: people detected per frame, 16 October 2026, 14:23–14:28.*
+
+**Results.** The run lasted 5 minutes and processed 59 frames (one camera read failed and was
+skipped, as designed). The count varies from 0 to 9 people (mean 2.56). The graph shows people
+crossing the square in waves, with peaks of 7, 6 and 9 people, and short empty periods (0) in
+between. For the lighting controller these are exactly the moments to switch the lamps on and
+off. Median inference time was 399 ms per frame on the laptop's CPU.
 
 **Verification.** Automated tests (`pytest`) check the processing loop, skipping of failed
 frames, the CSV format and the graph. They use a fake detector and camera, so they run in
@@ -108,6 +128,7 @@ pedestrian clip: 6 of 6 people found) and ran the full pipeline on the live came
 |---|---|
 | The sample camera from the teaching team is offline. | Picked an official, fixed municipal camera with a 5-second refresh. |
 | At night the square is dark and empty, so every count was 0. | Recorded the evidence run during the day. |
+| At YOLO's default 640 px most people were missed (2 of 8). | Detect at the camera's native 1280 px (7 of 8). |
 | The sample code sleeps 0.5 s between frames and has no CSV header. | 5-second fixed schedule; CSV with a header. |
 
 ## 3. Part 2: Azure virtual machine

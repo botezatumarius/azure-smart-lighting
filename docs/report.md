@@ -146,9 +146,9 @@ laptop: sender.py ──JPEG + token──▶ VM: vm.py ─┬─ YOLOv8 → cou
 
 | Setting | Value | Reason |
 |---|---|---|
-| Size | Standard_B1s: 1 vCPU, 1 GiB RAM | Recommended by the assignment; 750 free hours per month with Azure for Students |
+| Size | **Standard_B2ats_v2**: 2 vCPU (AMD), 1 GiB RAM, burstable | The recommended B1s was not offered to our subscription in West Europe. B2ats_v2 is its current-generation successor, has the same 1 GiB of RAM, and is also free for students (750 h/month) |
 | Image | Ubuntu Server 24.04 LTS | Long-term support; ships Python 3.12 |
-| Region | *[region used]* | Close to the laptop, for low latency |
+| Region | West Europe | Close to the laptop, for low latency; also offers the AI Vision *people* feature used in Part 3 |
 | Inbound ports | 22 (SSH), 80 (HTTP) | Administration and the public dashboard |
 | Authentication | SSH key, no password | Cannot be guessed by brute force |
 
@@ -167,7 +167,7 @@ laptop: sender.py ──JPEG + token──▶ VM: vm.py ─┬─ YOLOv8 → cou
 `deploy/setup.sh` makes the setup repeatable instead of a list of manual commands. It:
 
 1. installs the required packages `python3-opencv` and `python3-pip` (plus `python3-venv`);
-2. adds a 2 GiB swap file. With 1 GiB of RAM, installing PyTorch and loading the model can
+2. adds a 2 GiB swap file. With only 1 GiB of RAM, installing PyTorch and loading the model can
    exhaust memory, and Linux then kills the process (the "killed" error in the assignment's
    note 2). Swap lets the system move rarely used memory to disk;
 3. installs the CPU-only build of PyTorch and the project in a virtual environment, with
@@ -203,8 +203,9 @@ Design decisions:
    so local and cloud results are directly comparable;
 3. saves the annotated frame and appends a row to `counts.csv`, in the same format as Part 1.
 
-The detector runs one frame at a time (a lock). The B1s has a single vCPU, so running frames in
-parallel would not be faster and would use more memory. Extra frames wait in line, and that
+The detector runs one frame at a time (a lock). PyTorch already spreads one inference over
+both vCPUs, so running frames in parallel would not be faster and would need a second copy of
+the working memory, which 1 GiB of RAM cannot afford. Extra frames wait in line, and that
 waiting shows up in the response time. This is the effect we measure in Part 4.
 
 ![Sender output](images/part2-sender.png)

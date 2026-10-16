@@ -148,7 +148,7 @@ laptop: sender.py ──JPEG + token──▶ VM: vm.py ─┬─ YOLOv8 → cou
 |---|---|---|
 | Size | **Standard_B2ats_v2**: 2 vCPU (AMD), 1 GiB RAM, burstable | The recommended B1s was not offered to our subscription in West Europe. B2ats_v2 is its current-generation successor, has the same 1 GiB of RAM, and is also free for students (750 h/month) |
 | Image | Ubuntu Server 24.04 LTS | Long-term support; ships Python 3.12 |
-| Region | West Europe | Close to the laptop, for low latency; also offers the AI Vision *people* feature used in Part 3 |
+| Region | France Central | Closest of the five regions our student subscription may use; also offers the AI Vision *people* feature used in Part 3 |
 | Inbound ports | 22 (SSH), 80 (HTTP) | Administration and the public dashboard |
 | Authentication | SSH key, no password | Cannot be guessed by brute force |
 
@@ -182,6 +182,7 @@ laptop: sender.py ──JPEG + token──▶ VM: vm.py ─┬─ YOLOv8 → cou
 
 | Problem | Solution |
 |---|---|
+| Creating the VM in West Europe failed with `RequestDisallowedByAzure`. | Azure for Students only allows five regions (listed under Policy → Assignments). We used France Central, the closest one. |
 | Standard_B1s was "not available" for our subscription in West Europe. | Used Standard_B2ats_v2, B1s's current-generation successor with the same 1 GiB of RAM, also free for students. |
 | Another `ssh` (from an MSYS2 toolkit) came first on the laptop's PATH, so the key was created in the wrong place. | Moved the key to `%USERPROFILE%\.ssh` and called Windows' own OpenSSH explicitly. |
 

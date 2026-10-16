@@ -21,14 +21,17 @@
 </head>
 <body>
   <h1>Smart Lighting: people detection</h1>
-  <p class="muted">YOLOv8 on an Azure VM · updates every 5 s ·
-    <a href="counts.csv">download counts.csv</a></p>
+  <p class="muted">Updates every 5 s · <a href="counts.csv">download counts.csv</a></p>
 
   <section class="grid">
     <div class="card"><div class="muted">Frames processed</div><div class="value" id="frames">–</div></div>
     <div class="card"><div class="muted">People now</div><div class="value" id="people">–</div></div>
     <div class="card"><div class="muted">Mean people</div><div class="value" id="mean">–</div></div>
     <div class="card"><div class="muted">Mean inference</div><div class="value" id="inference">–</div></div>
+  </section>
+
+  <!-- VM only -->
+  <section class="grid" id="resources" hidden style="margin-top: 12px">
     <div class="card"><div class="muted">CPU</div><div class="value" id="cpu">–</div></div>
     <div class="card"><div class="muted">Memory</div><div class="value" id="memory">–</div></div>
     <div class="card"><div class="muted">Network in</div><div class="value" id="network">–</div></div>

@@ -50,6 +50,7 @@ async function refreshCounts() {
 async function refreshResources() {
   const r = await (await fetch("resources", { cache: "no-store" })).json();
   if (!r.timestamp) return;
+  document.getElementById("resources").hidden = false;
   show("cpu", `${r.cpu_percent.toFixed(0)} %`);
   show("memory", `${r.memory_percent.toFixed(0)} %`);
   show("network", `${r.network_in_kbps.toFixed(0)} kbit/s`);

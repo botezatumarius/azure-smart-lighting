@@ -152,6 +152,10 @@ laptop: sender.py ──JPEG + token──▶ VM: vm.py ─┬─ YOLOv8 → cou
 | Inbound ports | 22 (SSH), 80 (HTTP) | Administration and the public dashboard |
 | Authentication | SSH key, no password | Cannot be guessed by brute force |
 
+![VM configuration](images/part2-vm-config.png)
+
+*Figure: the VM configuration at creation (Azure Portal, Review + create).*
+
 ![VM overview](images/part2-vm-overview.png)
 
 *Figure: the VM in the Azure Portal (size, image, public IP).*

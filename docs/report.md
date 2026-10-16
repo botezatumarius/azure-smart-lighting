@@ -178,6 +178,13 @@ laptop: sender.py ──JPEG + token──▶ VM: vm.py ─┬─ YOLOv8 → cou
    a normal user rather than root. It is still allowed to use port 80
    (`CAP_NET_BIND_SERVICE`).
 
+### Problems encountered
+
+| Problem | Solution |
+|---|---|
+| Standard_B1s was "not available" for our subscription in West Europe. | Used Standard_B2ats_v2, B1s's current-generation successor with the same 1 GiB of RAM, also free for students. |
+| Another `ssh` (from an MSYS2 toolkit) came first on the laptop's PATH, so the key was created in the wrong place. | Moved the key to `%USERPROFILE%\.ssh` and called Windows' own OpenSSH explicitly. |
+
 ### Task 2.2 — Sending frames from the laptop
 
 `sender.py` reuses the Task 1.2 capture loop (`camera.capture`). Each frame is compressed to

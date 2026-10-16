@@ -17,12 +17,21 @@ class Detection:
 
 
 class PersonDetector:
-    def __init__(self, model: Path = Path("models/yolov8n.pt"), confidence: float = 0.5):
+    def __init__(
+        self,
+        model: Path = Path("models/yolov8n.pt"),
+        confidence: float = 0.5,
+        # Native camera width; at 640 px distant people are missed.
+        image_size: int = 1280,
+    ):
         self.model = YOLO(model)
         self.confidence = confidence
+        self.image_size = image_size
         # Warm-up run.
-        self.detect(np.zeros((640, 640, 3), dtype=np.uint8))
+        self.detect(np.zeros((720, 1280, 3), dtype=np.uint8))
 
     def detect(self, frame: np.ndarray) -> Detection:
-        result = self.model.predict(frame, classes=[PERSON], conf=self.confidence, verbose=False)[0]
+        result = self.model.predict(
+            frame, classes=[PERSON], conf=self.confidence, imgsz=self.image_size, verbose=False
+        )[0]
         return Detection(len(result.boxes), result.plot(), sum(result.speed.values()))

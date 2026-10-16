@@ -6,12 +6,13 @@ build-backend = "setuptools.build_meta"
 name = "smart-lighting"
 version = "0.1.0"
 description = "People counting with YOLOv8 for a smart lighting system, locally and on Azure"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["ultralytics>=8.3,<9", "matplotlib>=3.8", "requests>=2.31"]
 
 [project.optional-dependencies]
 vm = ["fastapi>=0.115", "uvicorn>=0.30", "psutil>=5.9"]
-dev = ["smart-lighting[vm]", "pytest>=8", "ruff>=0.6", "httpx2"]
+azure = ["azure-storage-blob>=12.19"]
+dev = ["smart-lighting[vm,azure]", "pytest>=8", "ruff>=0.6", "httpx2"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

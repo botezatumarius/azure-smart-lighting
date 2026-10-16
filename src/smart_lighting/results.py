@@ -1,6 +1,7 @@
 """Store results in CSV files and plot people counts over time."""
 
 import csv
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -15,7 +16,12 @@ COUNT_FIELDS = ("timestamp", "camera", "people", "inference_ms")
 
 
 class CsvLog:
-    """Append-only CSV file; the header is written once, when the file is created."""
+    """Append-only CSV file; the header is written once, when the file is created.
+
+    Safe to share between threads (the Part 4 load test writes from many at once).
+    """
+
+    _lock = threading.Lock()
 
     def __init__(self, path: Path, fields: tuple[str, ...]):
         self.path = path
@@ -27,7 +33,7 @@ class CsvLog:
         self._write({key: _format(value) for key, value in row.items()})
 
     def _write(self, row: dict, mode: str = "a") -> None:
-        with self.path.open(mode, newline="", encoding="utf-8") as file:
+        with self._lock, self.path.open(mode, newline="", encoding="utf-8") as file:
             csv.DictWriter(file, self.fields).writerow(row)
 
 

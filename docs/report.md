@@ -348,6 +348,89 @@ can handle (Part 4). The VM costs money even when nobody walks by.
 
 ## 5. Part 4: Multi-camera management
 
+### Task 4.1 — Increasing the number of cameras
+
+A real SLS covers an area with many cameras. To find out how many each architecture can serve,
+we increased the number of cameras step by step: **1, 2, 4, 8, 12, 16, 24 and 32**, each
+sending **one frame every 5 seconds**, for **2 minutes per step**, with a 30-second pause
+between steps so that one step's backlog does not spill into the next.
+
+Public webcams with a direct image URL, a fixed view and pedestrians are rare (Task 1.1), and
+32 of them would not all be online and in daylight at the same time. We therefore simulated
+the cameras with `loadtest.py`:
+
+- one thread per simulated camera, each with its own name (`n08-c03` = camera 3 of the
+  8-camera step), so every result can be traced to its step;
+- the real Gaggenau camera is read once every 5 s and **every simulated camera sends that
+  real, current frame**. The cloud therefore receives exactly the traffic of N real cameras:
+  N real 1280 × 720 frames (≈ 165 kB each) every 5 s. The public camera's server, however,
+  still receives only one request every 5 s;
+- the cameras are **spread evenly over the 5 s** (camera *i* starts at *i* × 5/N s), as
+  independent real cameras would be, rather than all sending at the same instant;
+- each simulated camera uses the same code path as a real one (`camera.capture` →
+  `streaming.stream` → target), so the measurements include JPEG encoding and upload.
+
+The same tool sends to the VM (`--target vm`) and to Blob Storage (`--target blob`), so both
+architectures are tested under identical conditions.
+
+### Task 4.2 — Processing limit of the VM
+
+**Test conditions.** 17 October 2026, 14:17–14:50, daylight. VM Standard_B2ats_v2 (2 vCPU,
+1 GiB) in Austria East, YOLOv8n at 1280 px; laptop in Spain. Data: `sent.csv` (laptop) and
+`resources.csv` (VM, every 5 s), summarised with `python -m smart_lighting.analysis load`.
+
+| Cameras | Delivered | Frames/s | Response ms (median / p95) | Inference ms (median) | CPU % (median) | Memory % (median) | Upload kbit/s |
+|---|---|---|---|---|---|---|---|
+| 1 | 100 % | 0.2 | 638 / 965 | 292 | 3 | 69 | 269 |
+| 2 | 100 % | 0.4 | 448 / 662 | 299 | 6 | 69 | 486 |
+| 4 | 100 % | 0.8 | 637 / 749 | 299 | 12 | 70 | 1,068 |
+| 8 | 100 % | 1.6 | 596 / 685 | 282 | 24 | 75 | 2,127 |
+| 12 | 100 % | 2.4 | 452 / 623 | 293 | 37 | 72 | 3,065 |
+| **16** | **100 %** | **3.2** | **600 / 682** | **292** | **49** | **79** | **4,252** |
+| 24 | 14 % | 0.7 | 27,208 / 48,261 | 934 | 23 | 90 | 864 |
+| 32 | 2 % | 0.1 | 27,428 / 58,676 | 1,191 | 15 | 79 | 144 |
+
+*Delivered = frames answered by the VM ÷ frames the cameras should have sent. The service
+memory is not shown; it stayed between 320 and 600 MB.*
+
+![VM performance vs number of cameras](images/part4-vm.png)
+
+*Figure: VM response time, CPU and throughput vs number of cameras (logarithmic axis).
+Throughput follows the offered load (dashed) up to 16 cameras and then collapses.*
+
+**The limit is 16 cameras.** Up to 16 cameras every frame was answered in about 0.6 s, and the
+response time did not grow with the load. At 24 cameras the system collapsed: only 14 % of
+the frames got an answer, after 27 s on average.
+
+**Why exactly there.** The VM runs one inference at a time, and one inference takes
+0.29 s. The most it can process is therefore 1 / 0.29 ≈ 3.4 frames/s, which is
+3.4 × 5 ≈ **17 cameras**. With 16 cameras (3.2 frames/s) the detector is busy 94 % of the
+time but keeps up. With 24 cameras (4.8 frames/s) more frames arrive than leave:
+
+1. requests wait in a queue on the VM, so response time rises above the 5 s interval;
+2. each waiting request holds its image in memory. The 1 GiB fills up (90–97 %), and Linux
+   moves memory to the swap file on disk;
+3. now the model itself must be read back from disk, so **inference becomes 3–30× slower**
+   (0.9–8.6 s), which makes the queue grow even faster: a downward spiral;
+4. **CPU usage falls** (from 49 % to 23 %) while the system is overloaded: the CPU is
+   waiting for the disk. CPU alone would wrongly suggest the VM has capacity to spare.
+
+The CPU never reached 100 % before the limit. With 2 vCPUs and inferences run one at a time,
+the model's speed sets the limit, and memory turns overload into collapse. The service did
+not crash: after the test it was still running, never restarted, and served new frames
+normally. The VM is thus a fixed-capacity system. To serve more cameras one must buy a larger
+VM or more VMs (*scale up / scale out*), or make inference cheaper, e.g. at 640 px at the cost
+of missed people (Task 1.2).
+
+**Bandwidth.** Each camera uploads about 270 kbit/s; 16 cameras need 4.3 Mbit/s into the VM.
+The VM's network is far from its limit, and data into Azure is free.
+
+**Cost per camera.** The VM costs the same whether it serves 1 or 16 cameras: ≈ $0.019/h list
+price (Task 2.5), i.e. **≈ $0.0012 per camera-hour at 16 cameras**, 16 times less than with one
+camera. A VM is cheapest when it runs close to its capacity, but it cannot absorb peaks.
+
+### Task 4.3 — Processing limit of the serverless application
+
 *To do.*
 
 ## 6. Conclusions

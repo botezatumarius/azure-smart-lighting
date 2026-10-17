@@ -421,6 +421,20 @@ not crash: after the test it was still running and had never been restarted (`NR
 VM or more VMs (*scale up / scale out*), or make inference cheaper, e.g. at 640 px at the cost
 of missed people (Task 1.2).
 
+**A confounding event.** At 14:34, during the 24-camera step, Ubuntu's automatic security
+updates (`unattended-upgrades`) downloaded ≈ 200 MB (a 313 Mbit/s burst in our log, also
+visible in Azure Monitor) and installed 55 packages until 14:48. This competed for the same
+scarce memory and disk. The capacity limit itself (≈ 17 cameras) follows from the inference
+time and holds regardless, but the update made the collapse at 24 cameras worse. *[Re-run of
+16/20/24 cameras without the update: to do.]* A production VM should schedule such updates
+outside operating hours.
+
+![Azure Monitor during the load test](images/part4-vm-metrics.png)
+
+*Figure: Azure Monitor during the load test (14:10–14:55). Available memory falls from
+≈ 280 MiB to almost zero once the load exceeds the VM's capacity (from ≈ 14:33); the network
+peak at ≈ 14:35 is the Ubuntu update download.*
+
 **Bandwidth.** Each camera uploads about 270 kbit/s; 16 cameras need 4.3 Mbit/s into the VM.
 The VM's network is far from its limit, and data into Azure is free.
 

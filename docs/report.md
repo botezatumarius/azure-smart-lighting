@@ -239,7 +239,10 @@ The same service serves a dashboard at `http://<public-ip>/`, refreshed every 5 
 
 ![Dashboard](images/part2-dashboard.png)
 
-*Figure: the dashboard opened through the VM's public IP.*
+*Figure: the dashboard opened through the VM's public IP (`http://68.210.225.50/`). Top: frames
+processed, current and mean people, mean inference time, and the VM's CPU, memory and incoming
+network. Bottom: the histogram (most frames contain 2–4 people), the count over time, and the
+latest frame with the detected people boxed. The time axis is in UTC, the VM's clock.*
 
 ### Task 2.5 — Performance
 
@@ -273,7 +276,9 @@ East. The VM ran only our service.
 
 ![Azure Monitor metrics](images/part2-metrics.png)
 
-*Figure: Azure Monitor metrics of the VM during the test.*
+*Figure: Azure Monitor (the platform's own measurement, independent of our code) for the VM
+with one camera: about 3 % CPU and 271 MiB of the 1 GiB still available, matching our
+`resources.csv`.*
 
 **What the metrics show.**
 

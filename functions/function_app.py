@@ -5,6 +5,7 @@ Results go to the static website container `$web`, which never triggers this fun
 so the function cannot call itself recursively.
 """
 
+import functools
 import io
 import logging
 import os
@@ -17,7 +18,7 @@ from azure.ai.vision.imageanalysis import ImageAnalysisClient
 from azure.ai.vision.imageanalysis.models import VisualFeatures
 from azure.core.credentials import AzureKeyCredential
 from azure.identity import DefaultAzureCredential
-from azure.storage.blob import BlobServiceClient, ContentSettings
+from azure.storage.blob import BlobServiceClient, ContainerClient, ContentSettings
 from PIL import Image, ImageDraw
 
 CONFIDENCE = 0.5  # same as YOLO
@@ -25,14 +26,23 @@ JPEG = ContentSettings(content_type="image/jpeg")
 JPEG_NO_CACHE = ContentSettings(content_type="image/jpeg", cache_control="no-store")
 
 app = func.FunctionApp()
-vision = ImageAnalysisClient(
-    os.environ["VISION_ENDPOINT"], AzureKeyCredential(os.environ["VISION_KEY"])
-)
-# Managed identity, no storage keys.
-website = BlobServiceClient(
-    os.environ["DataStorage__blobServiceUri"],  # noqa: SIM112
-    DefaultAzureCredential(),
-).get_container_client("$web")
+
+
+# Lazy clients: a missing setting fails the call, not the import.
+@functools.cache
+def vision() -> ImageAnalysisClient:
+    return ImageAnalysisClient(
+        os.environ["VISION_ENDPOINT"], AzureKeyCredential(os.environ["VISION_KEY"])
+    )
+
+
+@functools.cache
+def website() -> ContainerClient:
+    # Managed identity, no storage keys.
+    return BlobServiceClient(
+        os.environ["DataStorage__blobServiceUri"],  # noqa: SIM112
+        DefaultAzureCredential(),
+    ).get_container_client("$web")
 
 
 @app.function_name(name="ProcessFrame")
@@ -40,7 +50,7 @@ website = BlobServiceClient(
 def process_frame(blob: func.InputStream) -> None:
     image = blob.read()
     started = time.perf_counter()
-    result = vision.analyze(image_data=image, visual_features=[VisualFeatures.PEOPLE])
+    result = vision().analyze(image_data=image, visual_features=[VisualFeatures.PEOPLE])
     vision_ms = (time.perf_counter() - started) * 1000
     boxes = [p.bounding_box for p in result.people.list if p.confidence > CONFIDENCE]
 
@@ -50,14 +60,14 @@ def process_frame(blob: func.InputStream) -> None:
     captured = datetime.strptime(path.stem, "%Y%m%dT%H%M%S%fZ").replace(tzinfo=UTC)
 
     annotated = draw_boxes(image, boxes)
-    website.upload_blob(
+    website().upload_blob(
         f"frames/{camera}/{path.name}", annotated, overwrite=True, content_settings=JPEG
     )
-    website.upload_blob("latest.jpg", annotated, overwrite=True, content_settings=JPEG_NO_CACHE)
+    website().upload_blob("latest.jpg", annotated, overwrite=True, content_settings=JPEG_NO_CACHE)
 
     latency_ms = (datetime.now(UTC) - captured).total_seconds() * 1000
     row = (captured.isoformat(timespec="seconds"), camera, len(boxes), vision_ms, latency_ms)
-    website.get_blob_client("counts.csv").append_block(
+    website().get_blob_client("counts.csv").append_block(
         ",".join(f"{value:.1f}" if isinstance(value, float) else str(value) for value in row)
         + "\r\n"
     )

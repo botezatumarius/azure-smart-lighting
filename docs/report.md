@@ -193,14 +193,14 @@ laptop: sender.py ──JPEG + token──▶ VM: vm.py ─┬─ YOLOv8 → cou
 ### Task 2.2 — Sending frames from the laptop
 
 `sender.py` reuses the Task 1.2 capture loop (`camera.capture`). Each frame is compressed to
-JPEG (quality 90, ≈110 kB for a 1280 × 720 frame) and sent in an HTTP `POST /frames` request.
+JPEG (quality 90, ≈170 kB for a 1280 × 720 daylight frame) and sent in an HTTP `POST /frames` request.
 The VM answers with the people count. The sender logs each answer together with the
 **round-trip time** and the **bytes sent**; these are the data for Task 2.5.
 
 Design decisions:
 
 - **HTTP with a JPEG body.** HTTP is simple and passes through firewalls, and the same request
-  works for any number of cameras in Part 4. JPEG is about 25× smaller than the raw frame.
+  works for any number of cameras in Part 4. JPEG is about 16× smaller than the raw frame (2.7 MB).
 - **Shared-secret token.** Port 80 is public because of the dashboard, so the upload endpoint
   requires an `X-API-Key` header. Without it, anyone on the internet could inject frames.
   (HTTPS would also encrypt the token; we left it out to keep the practice focused, since the
@@ -243,8 +243,70 @@ The same service serves a dashboard at `http://<public-ip>/`, refreshed every 5 
 
 ### Task 2.5 — Performance
 
-*[To do after the Azure run: detection effectiveness, CPU, memory, bandwidth, cost and response
-time, from `sent.csv`, `resources.csv` and Azure Monitor.]*
+**Test conditions.** 16 October 2026, 15:03–15:08 (daylight). One camera (Gaggenau), one frame
+every 5 s, 60 frames sent from the laptop (Spain, home fibre connection) to the VM in Austria
+East. The VM ran only our service.
+
+**How the data was obtained.**
+
+| Metric | Source | Unit |
+|---|---|---|
+| Response time | `sent.csv` on the laptop: from sending the request to receiving the answer | ms |
+| Inference time | `counts.csv` on the VM: YOLOv8 pre-processing + inference + post-processing | ms |
+| CPU, memory, network | `resources.csv` on the VM: `psutil`, sampled every 5 s; cross-checked with Azure Monitor | %, MB, kbit/s |
+| Bandwidth | size of each uploaded JPEG, logged by the sender | kB per frame, kbit/s |
+| Cost | Azure price list for the resources used | USD |
+
+**Results** (`python -m smart_lighting.analysis run`; lists are mean / median / 95th percentile):
+
+| Metric | Value |
+|---|---|
+| Frames processed | 59 of 60 (one camera read failed and was skipped) |
+| Response time (ms) | 621 / 520 / 1,231 |
+| Inference time on the VM (ms) | 328 / 295 / 335 |
+| Network + HTTP overhead (response − inference, median) | ≈ 225 ms |
+| CPU usage of the VM (%) | 3 / 3 / 4 |
+| VM memory in use (%) | 66 / 66 / 71 of 1 GiB (plus ≈ 140 MB in swap) |
+| Memory of our service (MB) | 281 / 286 / 329 |
+| Upload size | 170 kB per frame → 267 kbit/s |
+| People per frame | mean 3.6, max 7 |
+
+![Azure Monitor metrics](images/part2-metrics.png)
+
+*Figure: Azure Monitor metrics of the VM during the test.*
+
+**What the metrics show.**
+
+- **Response time.** A frame is answered in about half a second: ≈ 0.3 s of inference plus
+  ≈ 0.2 s of network transfer (170 kB from Spain to Austria) and HTTP handling. That is far
+  below the 5-second interval, so for a lighting controller the VM reacts in real time. The
+  first frame was slower (1.5 s) because Linux had moved part of the idle model to swap;
+  occasional peaks of 1–2.5 s have the same cause or come from the home connection.
+- **CPU.** One inference uses about 0.3 s of one core every 5 s, so the 2-vCPU VM is about
+  3 % busy. Almost all of its capacity is unused with one camera; Part 4 measures how many
+  cameras it can take.
+- **Memory is the real constraint.** The OS and the model leave little of the 1 GiB free, and
+  some of it lives in swap. Without the swap file the installation was killed for lack of
+  memory, as the assignment warns.
+- **Bandwidth.** 267 kbit/s upload per camera is small for a home or city connection. Data
+  sent *into* Azure is free; only the dashboard's traffic leaves Azure.
+- **Detection effectiveness.** The VM runs the same model with the same settings as Part 1,
+  so it gives the same counts for the same image. We measured it against a manual count:
+  *[effectiveness table]*.
+
+**Cost** (Azure list prices, Austria East):
+
+| Item | Price | Note |
+|---|---|---|
+| VM Standard_B2ats_v2 | $0.0108 / hour | covered by the student free grant (750 h/month) |
+| OS disk, Standard SSD 30 GiB | ≈ $2.40 / month | charged also while the VM is stopped |
+| Public IP (Standard) | ≈ $0.005 / hour | charged also while the VM is stopped |
+| Data into Azure | free | |
+| **Total without the free grant** | **≈ $0.019 / hour ≈ $14 / month** | ≈ $0.000026 per frame at one camera |
+
+With the free grant only the disk and the IP are paid: about $6 per month. The cost does not
+depend on the number of frames, so it is the same for 1 camera or for the maximum the VM
+can handle (Part 4). The VM costs money even when nobody walks by.
 
 ## 4. Part 3: Serverless and Azure AI
 

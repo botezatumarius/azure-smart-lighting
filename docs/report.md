@@ -164,9 +164,24 @@ laptop: sender.py ──JPEG + token──▶ VM: vm.py ─┬─ YOLOv8 → cou
 
 *Figure: inbound rules: only SSH (22) and HTTP (80) are open.*
 
-![Service status on the VM](images/part2-vm-service.png)
+The service running on the VM (`systemctl status smart-lighting; free -h` over SSH):
 
-*Figure: the service running on the VM, with memory and swap.*
+```text
+● smart-lighting.service - Smart Lighting people counter and dashboard
+     Loaded: loaded (/etc/systemd/system/smart-lighting.service; enabled; preset: enabled)
+     Active: active (running) since Sat 2026-10-17 12:15:34 UTC; 10min ago
+     Memory: 509.4M (peak: 614.0M swap: 266.2M swap peak: 266.2M)
+     CGroup: /system.slice/smart-lighting.service
+             └─673 /home/azureuser/smart-lighting/.venv/bin/python -m smart_lighting.vm --port 80
+
+               total        used        free      shared  buff/cache   available
+Mem:           842Mi       583Mi        82Mi       3.3Mi       318Mi       258Mi
+Swap:          2.0Gi       330Mi       1.7Gi
+```
+
+`enabled` means it starts at boot: after the VM was stopped overnight and started again, the
+service was running without any manual step. The memory lines confirm the 1 GiB limit
+(842 MiB usable) and that part of the service lives in swap.
 
 `deploy/setup.sh` makes the setup repeatable instead of a list of manual commands. It:
 
@@ -220,13 +235,27 @@ both vCPUs, so running frames in parallel would not be faster and would need a s
 the working memory, which 1 GiB of RAM cannot afford. Extra frames wait in line, and that
 waiting shows up in the response time. This is the effect we measure in Part 4.
 
-![Sender output](images/part2-sender.png)
+The same frames seen from both sides. On the laptop, `sent.csv` holds the VM's answer plus
+the round-trip time and upload size:
 
-*Figure: the laptop sending frames and receiving the counts.*
+```csv
+timestamp,camera,people,inference_ms,response_ms,bytes_sent
+2026-10-16T15:03:05+02:00,gaggenau,2,549.7,1510.4,169480
+2026-10-16T15:03:09+02:00,gaggenau,3,297.9,475.4,169692
+2026-10-16T15:03:14+02:00,gaggenau,3,282.9,556.1,169651
+2026-10-16T15:03:19+02:00,gaggenau,7,304.5,506.2,170648
+```
 
-![CSV on the VM](images/part2-vm-csv.png)
+On the VM, `counts.csv` holds the result of each frame (UTC, the VM's clock; 13:03 UTC is
+15:03 in Spain):
 
-*Figure: `counts.csv` written on the VM.*
+```csv
+timestamp,camera,people,inference_ms
+2026-10-16T13:02:56+00:00,gaggenau,2,549.7
+2026-10-16T13:03:00+00:00,gaggenau,3,297.9
+2026-10-16T13:03:05+00:00,gaggenau,3,282.9
+2026-10-16T13:03:10+00:00,gaggenau,7,304.5
+```
 
 ### Task 2.4 — Results website
 

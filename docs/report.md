@@ -244,7 +244,7 @@ The same service serves a dashboard at `http://<public-ip>/`, refreshed every 5 
 ### Task 2.5 — Performance
 
 **Test conditions.** 16 October 2026, 15:03–15:08 (daylight). One camera (Gaggenau), one frame
-every 5 s, 60 frames sent from the laptop (Spain, home fibre connection) to the VM in Austria
+every 5 s, 60 frames sent from the laptop (in Spain) to the VM in Austria
 East. The VM ran only our service.
 
 **How the data was obtained.**
@@ -286,8 +286,8 @@ East. The VM ran only our service.
   3 % busy. Almost all of its capacity is unused with one camera; Part 4 measures how many
   cameras it can take.
 - **Memory is the real constraint.** The OS and the model leave little of the 1 GiB free, and
-  some of it lives in swap. Without the swap file the installation was killed for lack of
-  memory, as the assignment warns.
+  some of it lives in swap. We added the swap file as a precaution, before installing PyTorch,
+  so the "killed" error the assignment warns about never occurred.
 - **Bandwidth.** 267 kbit/s upload per camera is small for a home or city connection. Data
   sent *into* Azure is free; only the dashboard's traffic leaves Azure.
 - **Detection effectiveness.** The VM runs the same model with the same settings as Part 1,

@@ -36,7 +36,7 @@ async function refreshCounts() {
   histogram.update();
 
   const recent = rows.slice(-TIMELINE_POINTS);
-  timeline.data.labels = recent.map((r) => r.timestamp.slice(11, 19));
+  timeline.data.labels = recent.map((r) => new Date(r.timestamp).toLocaleTimeString());
   timeline.data.datasets[0].data = recent.map((r) => Number(r.people));
   timeline.update();
 

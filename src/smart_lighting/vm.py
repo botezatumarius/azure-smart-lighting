@@ -56,7 +56,10 @@ def create_app(data: Path, token: str, detector: PersonDetector) -> FastAPI:
             timestamp = datetime.now().astimezone()
             jpeg = cv2.imencode(".jpg", detection.annotated)[1].tobytes()
             (data / "frames" / f"{camera}-{timestamp:%Y%m%d-%H%M%S}.jpg").write_bytes(jpeg)
-            latest_image.write_bytes(jpeg)
+            # Atomic replace so the dashboard never reads a partial file.
+            staging = latest_image.with_suffix(".tmp")
+            staging.write_bytes(jpeg)
+            staging.replace(latest_image)
             counts.append(
                 timestamp=timestamp,
                 camera=camera,

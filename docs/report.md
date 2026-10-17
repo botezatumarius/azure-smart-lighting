@@ -417,8 +417,7 @@ time but keeps up. With 24 cameras (4.8 frames/s) more frames arrive than leave:
 
 The CPU never reached 100 % before the limit. With 2 vCPUs and inferences run one at a time,
 the model's speed sets the limit, and memory turns overload into collapse. The service did
-not crash: after the test it was still running, never restarted, and served new frames
-normally. The VM is thus a fixed-capacity system. To serve more cameras one must buy a larger
+not crash: after the test it was still running and had never been restarted (`NRestarts=0`). The VM is thus a fixed-capacity system. To serve more cameras one must buy a larger
 VM or more VMs (*scale up / scale out*), or make inference cheaper, e.g. at 640 px at the cost
 of missed people (Task 1.2).
 

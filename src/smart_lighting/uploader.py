@@ -23,6 +23,8 @@ FUNCTION_FIELDS = (*COUNT_FIELDS, "latency_ms")  # counts.csv columns (function)
 WEB_FILES = {"index.html": "text/html", "dashboard.js": "text/javascript"}
 WEB = Path(__file__).with_name("web")
 
+logging.getLogger("azure").setLevel(logging.WARNING)  # quiet SDK request logs
+
 
 class BlobTarget:
     """Uploads frames as raw/<camera>/<UTC capture time>.jpg."""

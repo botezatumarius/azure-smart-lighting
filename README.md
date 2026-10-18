@@ -123,5 +123,5 @@ src/smart_lighting/
   web/          dashboard page (VM and static website)
 functions/      Part 3: Azure Function (blob trigger → Azure AI Vision)
 deploy/         VM setup script and systemd service
-docs/           report, Azure guides, PDF build
+docs/           report, deployment docs, PDF build
 ```

@@ -942,7 +942,7 @@ frames never need processing, provided the per-image cost is acceptable.
 4. City of Gaggenau webcam: <https://www.gaggenau.de/webcams.212.htm>
 5. OpenCV `vtest.avi` sample video: <https://github.com/opencv/opencv/tree/4.x/samples/data>
 
-**Source code.** All code, the VM setup script, the Azure guides and the analysis tools are in
+**Source code.** All code, the VM setup script, the deployment documentation and the analysis tools are in
 the project repository, <https://github.com/botezatumarius/azure-smart-lighting>
 (`src/smart_lighting`, `functions`, `deploy`, `docs`). The README explains how to reproduce
 every measurement.

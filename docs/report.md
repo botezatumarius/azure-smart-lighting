@@ -1,7 +1,7 @@
 # Practice 1: Cloud Computing Services — Project Report
 
 **Course:** Architectures and Infrastructures for Artificial Intelligence  
-**Author:** Marius Botezatu  
+**Author:** Marius Botezatu (worked alone)  
 **Date:** 18 October 2026  
 **Repository:** <https://github.com/botezatumarius/azure-smart-lighting>
 

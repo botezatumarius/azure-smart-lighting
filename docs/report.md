@@ -682,15 +682,15 @@ once its result is stored in `$web`.
 | 48 | 9.6 | 100 % | 51 | 1,146 / 1,690 | 12.4 |
 | 64 | 12.8 | 100 % | 50 | 1,184 / 1,766 | 14.8 |
 | 96 | 19.2 | 100 % | 49 | 3,049 / 6,212 | 21.2 |
-| **128** | **25.6** | **100 %** | 54 | **5,641 / 12,764** | 31.9 |
+| **128** | **25.6** | **99.97 %** | 54 | **5,641 / 12,764** | 31.9 |
 
 ![Serverless performance vs number of cameras](images/part4-serverless.png)
 
 *Figure: serverless upload time, latency and throughput vs number of cameras. Throughput
 always equals the offered load; latency is flat up to 64 cameras and grows from 96.*
 
-**Every frame was processed at every level**, 9,032 frames in total, without a single
-failed invocation. Up to 64 cameras the latency did not change at all (≈ 1.2 s): Flex
+**Practically every frame was processed at every level**: 9,335 of 9,336 (one frame of the
+128-camera step was missing when we collected the results). Up to 64 cameras the latency did not change at all (≈ 1.2 s): Flex
 Consumption started more function instances as frames arrived, so each frame was processed
 in parallel with the others instead of waiting in line. This is the serverless promise of
 automatic scale-out, and it is visible in the flat line.

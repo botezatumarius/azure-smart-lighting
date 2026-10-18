@@ -37,12 +37,16 @@ def vision() -> ImageAnalysisClient:
 
 
 @functools.cache
-def website() -> ContainerClient:
+def storage() -> BlobServiceClient:
     # Managed identity, no storage keys.
     return BlobServiceClient(
         os.environ["DataStorage__blobServiceUri"],  # noqa: SIM112
         DefaultAzureCredential(),
-    ).get_container_client("$web")
+    )
+
+
+def website() -> ContainerClient:
+    return storage().get_container_client("$web")
 
 
 @app.function_name(name="ProcessFrame")
@@ -58,6 +62,13 @@ def process_frame(blob: func.InputStream) -> None:
     path = PurePosixPath(blob.name)
     camera = path.parent.name
     captured = datetime.strptime(path.stem, "%Y%m%dT%H%M%S%fZ").replace(tzinfo=UTC)
+    # Latency on Azure clocks only (the laptop clock may drift).
+    uploaded = (
+        storage()
+        .get_blob_client("raw", str(path.relative_to("raw")))
+        .get_blob_properties()
+        .creation_time
+    )
 
     annotated = draw_boxes(image, boxes)
     website().upload_blob(
@@ -65,7 +76,7 @@ def process_frame(blob: func.InputStream) -> None:
     )
     website().upload_blob("latest.jpg", annotated, overwrite=True, content_settings=JPEG_NO_CACHE)
 
-    latency_ms = (datetime.now(UTC) - captured).total_seconds() * 1000
+    latency_ms = (datetime.now(UTC) - uploaded).total_seconds() * 1000
     row = (captured.isoformat(timespec="seconds"), camera, len(boxes), vision_ms, latency_ms)
     website().get_blob_client("counts.csv").append_block(
         ",".join(f"{value:.1f}" if isinstance(value, float) else str(value) for value in row)

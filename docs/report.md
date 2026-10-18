@@ -344,7 +344,197 @@ can handle (Part 4). The VM costs money even when nobody walks by.
 
 ## 4. Part 3: Serverless and Azure AI
 
-*To do.*
+In this part there is no server to manage (Function as a Service). Uploading an image to Blob
+Storage triggers a function, which asks the Azure AI Vision service to find the people in it.
+
+```text
+laptop: uploader.py ──JPEG──▶ Storage: raw/ ──Event Grid (raw/…/*.jpg)──▶ Function ProcessFrame
+                                                                             │  ▲ people + boxes
+                                                          Azure AI Vision ◀──┘  │
+                                                                             ▼
+                       browser ◀── static website ◀── Storage: $web/ (counts.csv, latest.jpg, frames/)
+```
+
+All Part 3 resources are in **France Central**: one of the five regions our subscription may
+use, and one where the AI Vision *people* feature is offered. Keeping them in the same region
+keeps the traffic between them fast and free.
+
+### Task 3.1 — Static website in a storage account
+
+We created the storage account `smartlightingmb` (Standard, LRS, the cheapest redundancy, which
+is enough for a practice) and enabled **Static website** with `index.html` as index document.
+Azure then creates the special `$web` container and serves it at a public URL,
+<https://smartlightingmb.z28.web.core.windows.net/>.
+
+`python -m smart_lighting.uploader --publish-website` uploads **the same dashboard as Part 2**
+(`index.html`, `dashboard.js`) and creates `counts.csv` with its header. The dashboard only
+reads `counts.csv` and `latest.jpg` from its own folder, so it runs unchanged on both
+architectures. It hides the VM resource cards when there is no VM.
+
+![Static website settings](images/part3-static-website.png)
+
+*Figure: static website enabled on the storage account, with its public endpoint.*
+
+### Task 3.2 — Uploading images to a separate container
+
+The account has two containers: **`$web`** (the website) and **`raw`** (incoming frames, private).
+
+![Containers](images/part3-containers.png)
+
+*Figure: the `$web` and `raw` containers, both private (`$logs` is created by Azure).*
+
+`uploader.py` reuses the Task 1.2 capture loop and the Part 2 streaming code; only the target
+differs (`BlobTarget` instead of `VmTarget`). Each frame is stored as
+`raw/<camera>/<UTC capture time>.jpg`, at one frame every **0.5 s**, as the assignment suggests.
+The name carries the camera and the capture time, so the function needs no extra metadata.
+The Gaggenau camera refreshes every 5 s, so about 9 of every 10 uploads repeat the previous
+image. We kept the requested rate because it doubles as a small load test; Part 4 uses the
+realistic 5 s.
+
+The laptop authenticates with the storage account's connection string, read from an
+environment variable (kept in a git-ignored `.env` file), never from the code.
+
+### Task 3.3 — Function with a blob trigger on the input container only
+
+The function app `smart-lighting-func-mb` uses the **Flex Consumption** plan (Linux,
+Python 3.12, 2,048 MB instances). It is billed only while it runs and scales out automatically.
+Following the teaching team's Blob Trigger guide, the trigger is **event-based**
+(`source="EventGrid"`): Storage publishes an event when a blob is created, and an Event Grid
+subscription delivers it to the function. This reacts within about a second, without the
+polling of a classic blob trigger.
+
+![Function App](images/part3-function-app.png)
+
+*Figure: the Function App (Flex Consumption, France Central).*
+
+**Avoiding recursion.** The function writes into the same storage account it is triggered
+from, so a wrong configuration could make it trigger itself in a costly loop (the assignment's
+warning). Three independent safeguards prevent this:
+
+1. the code's trigger path is `raw/{name}`: only blobs in `raw` are bound to the function;
+2. the Event Grid subscription only forwards *Blob Created* events whose subject begins with
+   `/blobServices/default/containers/raw/blobs/` and ends with `.jpg`;
+3. the function only writes into `$web`, which neither of the above matches.
+
+![Event Grid filter](images/part3-event-filter.png)
+
+*Figure: the Event Grid subscription's filters: Blob Created events in `raw`, `.jpg` only.*
+
+![Event subscription](images/part3-event-subscription.png)
+
+*Figure: the event subscription `raw-frames`, delivering to the function's webhook.*
+
+**Identities instead of keys.** The function reads and writes the data account with its
+**system-assigned managed identity**, which was given *Storage Blob Data Owner* and *Storage
+Queue Data Contributor* on `smartlightingmb`. The app settings contain only the account's
+address (`DataStorage__blobServiceUri`, `__queueServiceUri`, `__credential=managedidentity`);
+there is no storage key in the code or in the settings. The function's own internal storage
+uses a separate user-assigned identity created by the portal.
+
+![Roles of the function on the data account](images/part3-roles.png)
+
+*Figure: role assignments of the function's managed identity on the data account.*
+
+The code was deployed from VS Code (*Azure Functions: Deploy to Function App*), as in the
+teaching team's guide.
+
+![Deployment from VS Code](images/part3-deploy.png)
+
+*Figure: deployments from VS Code.*
+
+![The function in the portal](images/part3-function.png)
+
+*Figure: the deployed function `ProcessFrame` with its blob trigger.*
+
+### Task 3.4 — Azure AI Vision service
+
+We created a **Computer Vision** resource `smart-lighting-vision-mb` in France Central with the
+**Standard S1** tier. The free F0 tier allows only 20 images per minute, a tenth of what
+one camera at 0.5 s sends. Its endpoint and key are stored as app settings of the function
+(`VISION_ENDPOINT`, `VISION_KEY`), not in the code. The teaching team's guide suggests Azure
+Key Vault for production; app settings are encrypted at rest and enough for this practice.
+
+![AI Vision resource](images/part3-vision.png)
+
+*Figure: the Computer Vision resource (S1, France Central).*
+
+### Task 3.5 — Counting people and drawing their boxes
+
+For each new frame, `ProcessFrame` (`functions/function_app.py`):
+
+1. reads the image from the trigger;
+2. calls Image Analysis 4.0 with the **`PEOPLE`** feature. The image *tagging* feature named in
+   the assignment only says *whether* there are people, not how many or where, while
+   `PEOPLE` returns one entry per person with a confidence and a `bounding_box`. As in
+   Parts 1 and 2, people with confidence ≤ 0.5 are discarded;
+3. draws a rectangle around each person from its `bounding_box` (Pillow);
+4. stores the annotated image as `$web/frames/<camera>/<name>.jpg` and `$web/latest.jpg`;
+5. appends a row to `$web/counts.csv`: capture time, camera, people, AI Vision time and latency.
+
+`counts.csv` is an **append blob**: many function instances may finish at the same time, and
+each append is atomic, so rows are never lost or mixed. A normal blob would need a
+read-modify-write that loses rows under concurrency.
+
+![Static website with results](images/part3-dashboard.png)
+
+*Figure: the static website showing the serverless results: histogram, people over time and
+the latest frame with the people boxed by the function.*
+
+![Function invocations](images/part3-invocations.png)
+
+*Figure: invocations of `ProcessFrame`: all successful, each taking 0.25–0.41 s.*
+
+### Problems encountered
+
+| Problem | Cause and solution |
+|---|---|
+| After the first deployment the function did not appear in the portal. | The code read its settings when the module was imported, and they were not set yet, so Python failed to load the file. The clients are now created on first use: a missing setting now fails one invocation with a clear message instead of hiding the function. |
+| Event Grid delivered nothing ("Delivery Failed" in its metrics); the app returned HTTP 503. | The portal gave the app's internal identity only blob rights on its internal storage, but the event-based blob trigger also uses queues there: 881 × `403 AuthorizationPermissionMismatch`, and the host kept restarting. We added *Storage Queue Data Contributor* and *Contributor* (the narrower *Storage Account Contributor* would be the least-privilege choice), then stopped and started the app. |
+| After the fix, deliveries returned HTTP 401. | During the crash loop the host had generated new system keys, so the webhook URL in the Event Grid subscription contained an outdated `blobs_extension` key. We updated the endpoint with the new key. |
+| Measured latencies were negative (≈ −9 s). | We first subtracted the laptop's capture time from Azure's clock, but the laptop's clock was ≈ 10 s fast. Latency is now measured on Azure's clocks only, from the blob's creation time (set by Storage) to the moment the result is stored. The upload is timed separately on the laptop as a duration, which needs no clock agreement. |
+
+![Failed deliveries](images/part3-delivery-failed.png)
+
+*Figure: Event Grid metrics during the permission problem: events matched the filter, but
+every delivery failed until the identity's roles were fixed.*
+
+### Task 3.6 — Performance
+
+**Test conditions.** 18 October 2026, 15:29–15:31 (daylight). One camera, one frame every 0.5 s,
+240 frames attempted (2 camera reads failed). Laptop in Spain, all Azure resources in France
+Central. Data: `sent.csv` (laptop: upload duration and size) and `counts.csv` (function:
+AI Vision time and latency).
+
+| Metric | Mean / median / p95 |
+|---|---|
+| Frames processed | 238 of 238 uploaded |
+| Upload time, laptop → Storage (ms) | 54 / 52 / 67 |
+| AI Vision call (ms) | 285 / 287 / 403 |
+| Latency, frame stored → result stored (ms) | 1,300 / 1,250 / 1,737 |
+| Upload size | 153 kB per frame (2.3 Mbit/s at 2 frames/s) |
+
+**What the times show.** About 1.3 s pass between a frame arriving in Storage and its result
+being stored: the Event Grid notification, reading the blob, the AI Vision call (≈ 0.3 s), and
+writing three blobs. Each step is a network call between services. The end-to-end time from
+the laptop is ≈ 1.35 s (upload + latency): more than the VM's ≈ 0.6 s, but well within the
+5 s between two frames of a camera. The function instances were already warm; a cold start
+of a scaled-to-zero app adds a few seconds to the first frame.
+
+**Detection effectiveness.** *[Comparison of YOLOv8 and Azure AI on the same images: to do.]*
+
+**Cost** (list prices; per frame):
+
+| Item | Price | Per frame |
+|---|---|---|
+| AI Vision S1, Image Analysis | ≈ $1 per 1,000 images (first 5,000 free for students) | ≈ $0.001 |
+| Function (Flex Consumption) | per GB-second of execution; 100,000 GB-s/month free | ≈ 0.6 GB-s, within the free grant |
+| Storage + Event Grid | per operation (~5 per frame) and per GB stored | < $0.00001 |
+
+**AI Vision dominates: about $0.001 per frame.** One camera at one frame every 5 s costs
+≈ $0.72 per hour, and at 0.5 s ≈ $7 per hour. Compared with the VM (≈ $0.019 per hour for up
+to 16 cameras), serverless + Azure AI is far more expensive *per frame*. However, it costs
+nothing when no frames arrive and needs no capacity planning: we pay exactly for the work
+done.
 
 ## 5. Part 4: Multi-camera management
 

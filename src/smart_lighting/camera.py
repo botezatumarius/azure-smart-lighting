@@ -105,13 +105,7 @@ class ChangeFilter:
         self, frames: Iterator[tuple[datetime, np.ndarray]]
     ) -> Iterator[tuple[datetime, np.ndarray]]:
         for timestamp, frame in frames:
-            small = cv2.GaussianBlur(
-                cv2.cvtColor(
-                    cv2.resize(frame, (320, 180), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2GRAY
-                ),
-                (3, 3),
-                0,
-            )
+            small = _small_grey(frame)
             if self._unchanged(small, timestamp):
                 self.skipped += 1
                 continue
@@ -123,6 +117,12 @@ class ChangeFilter:
         if self._last is None or (timestamp - self._last_time).total_seconds() >= self.heartbeat:
             return False
         return int((cv2.absdiff(small, self._last) > self.delta).sum()) < self.min_pixels
+
+
+def _small_grey(frame: np.ndarray) -> np.ndarray:
+    """A 320 x 180 blurred grey copy: enough to see movement, insensitive to pixel noise."""
+    small = cv2.resize(frame, (320, 180), interpolation=cv2.INTER_AREA)
+    return cv2.GaussianBlur(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), (3, 3), 0)
 
 
 def to_jpeg(frame: np.ndarray, quality: int = 90) -> bytes:

@@ -1,6 +1,6 @@
 """Render docs/report.md to docs/report.pdf (Markdown → HTML → headless Chrome).
 
-    python docs/build_pdf.py
+python docs/build_pdf.py
 """
 
 import subprocess

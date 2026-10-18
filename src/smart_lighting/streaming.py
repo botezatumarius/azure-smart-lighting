@@ -26,9 +26,8 @@ class Target(Protocol):
 
 def stream(
     frames: Iterable[tuple[datetime, np.ndarray]], target: Target, camera: str, sent: CsvLog
-) -> int:
-    """Submit each frame; log the result, round-trip time and upload size. Returns frames sent."""
-    count = 0
+) -> None:
+    """Submit each frame; log the result, round-trip time and upload size."""
     for timestamp, frame in frames:
         jpeg = to_jpeg(frame)
         started = time.perf_counter()
@@ -45,6 +44,4 @@ def stream(
             bytes_sent=len(jpeg),
             **result,
         )
-        count += 1
         log.info("%s: sent %d kB in %.0f ms %s", camera, len(jpeg) // 1000, response_ms, result)
-    return count

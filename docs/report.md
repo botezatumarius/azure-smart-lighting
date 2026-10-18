@@ -24,6 +24,7 @@ All parts use the same people count (YOLOv8 or Azure AI) and record results in t
 format, so the architectures can be compared directly. For the cloud parts we measure response time,
 resource use, bandwidth, cost and detection effectiveness. Section 6 describes the optional
 advanced work: sending fewer and smaller images, and counting each person once by tracking.
+The code and the raw data of every measurement are in the repository (`results/`).
 
 ## 2. Part 1: Local processing
 
@@ -944,5 +945,6 @@ frames never need processing, provided the per-image cost is acceptable.
 
 **Source code.** All code, the VM setup script, the deployment documentation and the analysis tools are in
 the project repository, <https://github.com/botezatumarius/azure-smart-lighting>
-(`src/smart_lighting`, `functions`, `deploy`, `docs`). The README explains how to reproduce
-every measurement.
+(`src/smart_lighting`, `functions`, `deploy`, `docs`). The raw measurement data (CSV) behind
+every table and graph is in `results/`, and the README explains how to reproduce each
+measurement.

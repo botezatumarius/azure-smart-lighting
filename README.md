@@ -5,6 +5,7 @@ frames with YOLOv8, first locally and then on Azure.
 
 All four parts are implemented and measured. The report is [docs/report.md](docs/report.md);
 `python docs/build_pdf.py` renders it to `docs/report.pdf` for submission.
+The measurement data behind it is in [results/](results/README.md).
 
 ## Setup
 
@@ -124,4 +125,5 @@ src/smart_lighting/
 functions/      Part 3: Azure Function (blob trigger → Azure AI Vision)
 deploy/         VM setup script and systemd service
 docs/           report, deployment docs, PDF build
+results/        raw measurement data (CSV) behind the report
 ```

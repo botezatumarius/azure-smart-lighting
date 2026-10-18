@@ -325,8 +325,9 @@ with one camera: about 3 % CPU and 271 MiB of the 1 GiB still available, matchin
 - **Bandwidth.** 267 kbit/s upload per camera is small for a home or city connection. Data
   sent *into* Azure is free; only the dashboard's traffic leaves Azure.
 - **Detection effectiveness.** The VM runs the same model with the same settings as Part 1,
-  so it gives the same counts for the same image. We measured it against a manual count:
-  *[effectiveness table]*.
+  so it gives the same counts for the same image. Measured against a manual count on 12 frames
+  it found **56 % of the people with no false detections**; the full comparison with Azure AI
+  is in Task 3.6.
 
 **Cost** (Azure list prices, Austria East):
 
@@ -491,6 +492,7 @@ the latest frame with the people boxed by the function.*
 | After the first deployment the function did not appear in the portal. | The code read its settings when the module was imported, and they were not set yet, so Python failed to load the file. The clients are now created on first use: a missing setting now fails one invocation with a clear message instead of hiding the function. |
 | Event Grid delivered nothing ("Delivery Failed" in its metrics); the app returned HTTP 503. | The portal gave the app's internal identity only blob rights on its internal storage, but the event-based blob trigger also uses queues there: 881 × `403 AuthorizationPermissionMismatch`, and the host kept restarting. We added *Storage Queue Data Contributor* and *Contributor* (the narrower *Storage Account Contributor* would be the least-privilege choice), then stopped and started the app. |
 | After the fix, deliveries returned HTTP 401. | During the crash loop the host had generated new system keys, so the webhook URL in the Event Grid subscription contained an outdated `blobs_extension` key. We updated the endpoint with the new key. |
+| About 5 % of frames at 5 s, and far more at 0.5 s, came out partly grey. | The camera rewrites its image every 5 s, and a download overlapping the rewrite returned a truncated file, which OpenCV decoded without any error. We found it while checking frames by eye, confirmed it (3 of 30 downloads), and now verify that each downloaded JPEG ends with its end marker `FF D9`; incomplete images are skipped like any failed read. Timing measurements are unaffected; people counts in the affected frames (3 of 59 in Part 1) may be too low. |
 | Measured latencies were negative (≈ −9 s). | We first subtracted the laptop's capture time from Azure's clock, but the laptop's clock was ≈ 10 s fast. Latency is now measured on Azure's clocks only, from the blob's creation time (set by Storage) to the moment the result is stored. The upload is timed separately on the laptop as a duration, which needs no clock agreement. |
 
 ![Failed deliveries](images/part3-delivery-failed.png)
@@ -520,7 +522,38 @@ the laptop is ≈ 1.35 s (upload + latency): more than the VM's ≈ 0.6 s, but w
 5 s between two frames of a camera. The function instances were already warm; a cold start
 of a scaled-to-zero app adds a few seconds to the first frame.
 
-**Detection effectiveness.** *[Comparison of YOLOv8 and Azure AI on the same images: to do.]*
+**Detection effectiveness.** Detection confidence is not accuracy, so we measured it against
+a manual count. From the frames uploaded in Part 3 we took the 26 distinct, complete images,
+ran **both detectors on the same images** (`python -m smart_lighting.compare`: YOLOv8 at
+1280 px, as on the VM, and Azure AI Vision, as in the function), and counted the people by eye
+in an evenly spread sample of 12 frames (`runs/compare/ground-truth.csv`).
+
+| 12 frames, 9 people | YOLOv8n (VM) | Azure AI Vision (serverless) |
+|---|---|---|
+| People found (recall) | 5 of 9 (**56 %**) | 8 of 9 (**89 %**) |
+| False detections | **0** | 3 (always the same flower planter) |
+| Precision | **100 %** | 73 % |
+| Frames with the exact count | 8 of 12 | 10 of 12 |
+| Mean absolute count error | 0.33 people | 0.17 people |
+| Frames with people where nobody was detected | 2 of 5 | **0 of 5** |
+
+![Both detectors on the same frame](images/compare-22.jpg)
+
+*Figure: the same frame seen by both detectors (blue: YOLOv8, green: Azure AI). YOLOv8
+merges the two people walking side by side into one; Azure AI separates them.*
+
+![A false detection by Azure AI](images/compare-31.jpg)
+
+*Figure: Azure AI's recurring false detection: the flower planter with a folded red umbrella.*
+
+YOLOv8n never reported a person that was not there, but it missed almost half of the people,
+mostly small, distant or partly hidden ones (Task 1.2 showed it misses even more at 640 px).
+Azure AI found nearly everyone but repeatedly took one static object for a person. **For a
+lighting controller, a missed person is worse than a false one**: a missed person means
+walking in the dark, while a false one only wastes some energy. Azure AI never missed a frame
+with people in it, and its static false positive could be removed by ignoring a fixed area or
+detections that never move. The sample is small (12 frames, 9 people, one cloudy afternoon),
+so these figures indicate a tendency rather than precise rates.
 
 **Cost** (list prices; per frame):
 
@@ -634,7 +667,71 @@ camera. A VM is cheapest when it runs close to its capacity, but it cannot absor
 
 ### Task 4.3 — Processing limit of the serverless application
 
-*To do.*
+**Test conditions.** 18 October 2026, 15:32–15:55, daylight. The same load tool and steps
+(1, 4, 16, 32, 48, 64, 96 and 128 cameras, 2 minutes each, one frame per camera every 5 s) with
+`--target blob`. Data: `sent.csv` (laptop: upload duration and size) and the function's
+`counts.csv` (one row per processed frame, with its latency). A frame counts as processed
+once its result is stored in `$web`.
+
+| Cameras | Frames/s | Processed | Upload ms (median) | Latency ms (median / p95) | Upload Mbit/s |
+|---|---|---|---|---|---|
+| 1 | 0.2 | 100 % | 52 | 1,306 / 1,529 | 0.3 |
+| 4 | 0.8 | 100 % | 57 | 1,280 / 1,702 | 1.0 |
+| 16 | 3.2 | 100 % | 51 | 1,115 / 1,667 | 4.0 |
+| 32 | 6.4 | 100 % | 50 | 1,159 / 1,674 | 8.3 |
+| 48 | 9.6 | 100 % | 51 | 1,146 / 1,690 | 12.4 |
+| 64 | 12.8 | 100 % | 50 | 1,184 / 1,766 | 14.8 |
+| 96 | 19.2 | 100 % | 49 | 3,049 / 6,212 | 21.2 |
+| **128** | **25.6** | **100 %** | 54 | **5,641 / 12,764** | 31.9 |
+
+![Serverless performance vs number of cameras](images/part4-serverless.png)
+
+*Figure: serverless upload time, latency and throughput vs number of cameras. Throughput
+always equals the offered load; latency is flat up to 64 cameras and grows from 96.*
+
+**Every frame was processed at every level**, 9,032 frames in total, without a single
+failed invocation. Up to 64 cameras the latency did not change at all (≈ 1.2 s): Flex
+Consumption started more function instances as frames arrived, so each frame was processed
+in parallel with the others instead of waiting in line. This is the serverless promise of
+automatic scale-out, and it is visible in the flat line.
+
+**The limit is about 96–128 cameras.** At 96 cameras the median latency rose to 3 s, and at
+128 cameras to 5.6 s (p95 12.8 s): a camera's result then arrives after its next frame, and
+work queues up. We define that as the processing limit for a lighting controller. Unlike
+the VM, the system did not collapse: frames waited and were all eventually processed. What
+saturates is outside our code: the rate at which AI Vision S1 accepts requests (the SDK
+retries throttled calls automatically, which adds delay) and the speed at which Flex
+Consumption adds instances. Both limits can be raised (a higher AI quota, more maximum
+instances) without changing the code. The laptop was not the bottleneck: uploads stayed at
+≈ 50 ms even at 32 Mbit/s.
+
+**Cost at the limit.** At 128 cameras (25.6 frames/s) AI Vision costs about $92 per hour at list
+price, against ≈ $0.019 per hour for the VM. The load test itself used ≈ 9,000 images.
+
+### Comparison of the two architectures
+
+![VM vs serverless](images/part4-comparison.png)
+
+*Figure: frames processed and median end-to-end time (upload + processing) vs number of
+cameras, for both architectures. The dashed line is the 5 s between two frames of a camera.*
+
+| | VM (Part 2) | Serverless + Azure AI (Part 3) |
+|---|---|---|
+| End-to-end time per frame | **≈ 0.6 s** | ≈ 1.2–1.4 s |
+| Processing limit | **16 cameras**, then collapse (14 % processed at 24) | **≈ 96–128 cameras**, then slower but nothing lost |
+| Behaviour under overload | queue → memory → swap → slower inference → collapse | queue → higher latency, eventually processed |
+| Scaling | manual: a bigger VM or more VMs | automatic scale-out |
+| Detection (Task 3.6) | 56 % of people found, no false detections | 89 % found, some static false detections |
+| Cost | fixed ≈ $0.019 / h, any load | ≈ $0.001 per frame (≈ $0.72 per camera-hour) |
+| Cost when idle | same as under load | nothing |
+| Operation | we patch the OS, manage memory, open ports | none: the platform runs it |
+
+The two architectures trade **cost** against **elasticity**. For a fixed, known number of
+cameras that fits one machine, the VM is much faster and cheaper per frame. The serverless
+design costs about 40 times more per camera at full load, but scales on its own to ~6 times
+as many cameras, never drops frames, and costs nothing at night when cameras send nothing.
+In a real SLS the deciding factors would be the number of cameras and how variable the load
+is.
 
 ## 6. Conclusions
 

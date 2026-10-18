@@ -21,7 +21,7 @@ cloud, to observe the advantages and costs of each model:
 4. **Multiple cameras:** find how many cameras each cloud architecture can handle.
 
 All parts use the same people count (YOLOv8 or Azure AI) and record results in the same CSV
-format, so the architectures can be compared directly. For each part we measure response time,
+format, so the architectures can be compared directly. For the cloud parts we measure response time,
 resource use, bandwidth, cost and detection effectiveness. Section 6 describes the optional
 advanced work: sending fewer and smaller images, and counting each person once by tracking.
 
@@ -52,7 +52,7 @@ capture process that Parts 2 and 3 reuse. Design decisions:
 
 - **A new connection for each frame.** A stream that stays open buffers frames while the
   model is busy, so the next frame read would be seconds old. Reconnecting always returns the
-  current image. At one frame per 5 s this costs little (≈0.5 s per read in our tests).
+  current image. At one frame per 5 s this costs little (≈ 0.5 s per read in our tests).
 - **Any camera type.** Still images and video streams (MJPEG, HLS) are both supported, so a
   camera is added by adding its URL to `CAMERAS`.
 - **Only complete images.** The camera rewrites its image every 5 s, and a download that
@@ -79,7 +79,7 @@ The same-frame comparison is the controlled test. The two live runs were taken b
 the same afternoon; as the crowd changes from minute to minute, their means only confirm the trend.
 
 Detecting at the native 1280 px finds 3–4 times more people, so all parts use 1280 px. This
-makes inference slower (≈400 ms instead of ≈160 ms per frame on the laptop), which is still far
+makes inference slower (≈ 400 ms instead of ≈ 160 ms per frame on the laptop), which is still far
 below the 5-second interval. The camera's resolution is therefore sufficient, provided the model
 is not given a smaller copy of it.
 
@@ -219,7 +219,7 @@ service was running without any manual step. The memory lines confirm the 1 GiB 
 ### Task 2.2 — Sending frames from the laptop
 
 `sender.py` reuses the Task 1.2 capture loop (`camera.capture`). Each frame is compressed to
-JPEG (quality 90, ≈170 kB for a 1280 × 720 daylight frame) and sent in an HTTP `POST /frames` request.
+JPEG (quality 90, ≈ 170 kB for a 1280 × 720 daylight frame) and sent in an HTTP `POST /frames` request.
 The VM answers with the people count. The sender logs each answer together with the
 **round-trip time** and the **bytes sent**; these are the data for Task 2.5.
 
@@ -602,9 +602,11 @@ done.
 ### Task 4.1 — Increasing the number of cameras
 
 A real SLS covers an area with many cameras. To find out how many each architecture can serve,
-we increased the number of cameras step by step: **1, 2, 4, 8, 12, 16, 24 and 32**, each
-sending **one frame every 5 seconds**, for **2 minutes per step**, with a 30-second pause
-between steps so that one step's backlog does not spill into the next.
+we increased the number of cameras step by step, each camera sending **one frame every
+5 seconds**, for **2 minutes per step**, with a 30-second pause between steps so that one
+step's backlog does not spill into the next. The VM was tested with **1, 2, 4, 8, 12, 16, 24
+and 32** cameras; the serverless application, which kept up much longer, with **1, 4, 16, 32,
+48, 64, 96 and 128**.
 
 Public webcams with a direct image URL, a fixed view and pedestrians are rare (Task 1.1), and
 32 of them would not all be online and in daylight at the same time. We therefore simulated

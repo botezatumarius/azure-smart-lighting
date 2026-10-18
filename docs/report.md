@@ -70,10 +70,12 @@ capture process that Parts 2 and 3 reuse. Design decisions:
 to 640 px before detection. On this wide view a person is then only about 10 px tall, and most
 are missed. We compared both sizes on the same frame, which had 8 people visible:
 
-| Detection size | People found (of 8) | Run of 5 min: mean people per frame |
+| Detection size | People found in that frame (of 8) | Live run: mean people per frame |
 |---|---|---|
-| 640 px (YOLO default) | 2 | 0.67 |
-| **1280 px (native)** | **7** | **2.56** |
+| 640 px (YOLO default) | 2 | 0.67 (30 frames, 14:20–14:23) |
+| **1280 px (native)** | **7** | **2.56** (59 frames, 14:23–14:28) |
+
+The two live runs followed each other on the same afternoon, so they saw similar crowds.
 
 Detecting at the native 1280 px finds 3–4 times more people, so all parts use 1280 px. This
 makes inference slower (≈400 ms instead of ≈160 ms per frame on the laptop), which is still far
@@ -509,6 +511,11 @@ the latest frame with the people boxed by the function.*
 *Figure: Event Grid metrics during the permission problem: events matched the filter, but
 every delivery failed until the identity's roles were fixed.*
 
+![Roles added on the internal storage](images/part3-host-roles.png)
+
+*Figure: the fix: the app's user-assigned identity now also has Storage Queue Data Contributor
+on the function's internal storage account.*
+
 ### Task 3.6 — Performance
 
 **Test conditions.** 18 October 2026, 15:29–15:31 (daylight). One camera, one frame every 0.5 s,
@@ -636,7 +643,7 @@ the frames got an answer, after a median of 27 s.
 
 **Why exactly there.** The VM runs one inference at a time, and one inference takes
 0.29 s. The most it can process is therefore 1 / 0.29 ≈ 3.4 frames/s, which is
-3.4 × 5 ≈ **17 cameras**. With 16 cameras (3.2 frames/s) the detector is busy 94 % of the
+3.4 × 5 ≈ **17 cameras**. With 16 cameras (3.2 frames/s) the detector is busy 93 % of the
 time but keeps up. With 24 cameras (4.8 frames/s) more frames arrive than leave:
 
 1. requests wait in a queue on the VM, so response time rises above the 5 s interval;

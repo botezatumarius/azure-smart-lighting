@@ -2,7 +2,8 @@
 
 **Course:** Architectures and Infrastructures for Artificial Intelligence  
 **Author:** Marius Botezatu  
-**Date:** 18 October 2026
+**Date:** 18 October 2026  
+**Repository:** <https://github.com/botezatumarius/azure-smart-lighting>
 
 ## 1. Introduction
 
@@ -903,5 +904,5 @@ frames never need processing, provided the per-image cost is acceptable.
 5. OpenCV `vtest.avi` sample video: <https://github.com/opencv/opencv/tree/4.x/samples/data>
 
 **Source code.** All code, the VM setup script, the Azure guides and the analysis tools are in
-the project repository (`src/smart_lighting`, `functions`, `deploy`, `docs`). The README explains
+the project repository, <https://github.com/botezatumarius/azure-smart-lighting> (`src/smart_lighting`, `functions`, `deploy`, `docs`). The README explains
 how to reproduce every measurement.

@@ -157,9 +157,9 @@ laptop: sender.py ──JPEG + token──▶ VM: vm.py ─┬─ YOLOv8 → cou
 
 | Setting | Value | Reason |
 |---|---|---|
-| Size | **Standard_B2ats_v2**: 2 vCPU (AMD), 1 GiB RAM, burstable | The recommended B1s had no capacity in any region our subscription allows. B2ats_v2 is its current-generation successor, has the same 1 GiB of RAM, and is also free for students (750 h/month) |
+| Size | **Standard_B2ats_v2**: 2 vCPU (AMD), 1 GiB RAM, burstable | The recommended B1s was not available in the regions we tried (West Europe, France Central). B2ats_v2 is its current-generation successor, has the same 1 GiB of RAM, and is also free for students (750 h/month) |
 | Image | Ubuntu Server 24.04 LTS | Long-term support; ships Python 3.12 |
-| Region | Austria East | One of the five regions our student subscription may use, and the only one with capacity for a free-tier size |
+| Region | Austria East | One of the five regions our student subscription may use, where a free-tier size was available |
 | Inbound ports | 22 (SSH), 80 (HTTP) | Administration and the public dashboard |
 | Authentication | SSH key, no password | Cannot be guessed by brute force |
 
@@ -540,10 +540,10 @@ the laptop is ≈ 1.35 s (upload + latency): more than the VM's ≈ 0.6 s, but w
 of a scaled-to-zero app adds a few seconds to the first frame.
 
 **Detection effectiveness.** Detection confidence is not accuracy, so we measured it against
-a manual count. From the frames uploaded in Part 3 we took the 26 distinct, complete images,
-ran **both detectors on the same images** (`python -m smart_lighting.compare`: YOLOv8 at
+a manual count. We took the 36 distinct images uploaded in the Part 3 run (26 of them
+complete), ran **both detectors on the same images** (`python -m smart_lighting.compare`: YOLOv8 at
 1280 px, as on the VM, and Azure AI Vision, as in the function), and counted the people by eye
-in an evenly spread sample of 12 frames (every third complete frame):
+in an evenly spread sample of 12 complete frames:
 
 | Frame | 01, 04, 07, 10, 28, 35 | 13 | 16 | 19 | 22 | 24 | 31 |
 |---|---|---|---|---|---|---|---|
@@ -580,8 +580,8 @@ Azure AI found nearly everyone but repeatedly took one static object for a perso
 lighting controller, a missed person is worse than a false one**: a missed person means
 walking in the dark, while a false one only wastes some energy. Azure AI detected something in
 every frame with people (in one of them, frame 13, only because of its false detection), and its
-static false positive could be removed by ignoring a fixed area or detections that never move. The sample is small (12 frames, 9 people, one cloudy afternoon),
-so these figures indicate a tendency rather than precise rates.
+static false positive could be removed by ignoring a fixed area or detections that never move. The sample is small (12 frames, 9 people, one cloudy
+afternoon), so these figures indicate a tendency rather than precise rates.
 
 **Cost** (list prices; per frame):
 

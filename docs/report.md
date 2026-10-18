@@ -648,8 +648,9 @@ of missed people (Task 1.2).
 updates (`unattended-upgrades`) downloaded ≈ 200 MB (a 313 Mbit/s burst in our log, also
 visible in Azure Monitor) and installed 55 packages until 14:48. This competed for the same
 scarce memory and disk. The capacity limit itself (≈ 17 cameras) follows from the inference
-time and holds regardless, but the update made the collapse at 24 cameras worse. *[Re-run of
-16/20/24 cameras without the update: to do.]* A production VM should schedule such updates
+time and holds regardless, but the update made the collapse at 24 cameras worse. We did not repeat the
+step without the update, so the exact collapse point between 16 and 24 cameras is not
+measured. A production VM should schedule such updates
 outside operating hours.
 
 ![Azure Monitor during the load test](images/part4-vm-metrics.png)
@@ -735,10 +736,73 @@ is.
 
 ## 6. Conclusions
 
-*To do.*
+We built one people-counting pipeline for a Smart Lighting System and ran it on three
+infrastructures: a laptop, an Azure virtual machine, and a serverless design with Azure AI.
+The same capture code, the same 5-second cadence and the same CSV format were used
+throughout, so the measurements are directly comparable. The work supports these conclusions:
+
+1. **The input matters as much as the model.** On a wide camera view YOLOv8 at its default
+   640 px found only 2 of 8 people; at the camera's native 1280 px it found 7. A camera that
+   rewrites its image while it is being downloaded silently delivered truncated frames (≈ 5 %
+   at 5 s, more at 0.5 s), and a laptop clock 10 s fast made a naive latency measurement
+   negative. All three were found by inspecting the data, not by the code failing, and are
+   now handled in the code.
+2. **The VM is fast and cheap but has a hard limit.** With one camera a frame was answered in
+   ≈ 0.6 s at ≈ 3 % CPU. The limit, 16 cameras, matches the inference time
+   (1 / 0.29 s ≈ 3.4 frames/s ≈ 17 cameras). Beyond it the 1 GiB of memory, not the CPU, turned
+   overload into collapse: queued frames forced the model into swap and inference became up
+   to 30 times slower. Memory-limited machines need back-pressure, i.e. rejecting excess work,
+   rather than an unbounded queue.
+3. **Serverless trades cost for elasticity.** The function scaled out by itself: up to
+   64 cameras its latency stayed at ≈ 1.2 s, and even at 128 cameras practically every frame
+   was processed, only later. Each frame, however, passes through several services (≈ 1.3 s
+   in total), and Azure AI costs ≈ $0.001 per image, about 40 times more per camera than the
+   VM at full load. In return it costs nothing when no frames arrive and needs no operating
+   system, patching or capacity planning.
+4. **The managed AI service detected people better, but not perfectly.** On the same images
+   Azure AI found 89 % of the people against YOLOv8n's 56 %, at the price of a recurring false
+   detection of a static object. For lighting, where missing a person is worse than a false
+   alarm, Azure AI's behaviour is preferable; YOLOv8n would need a larger model or a closer
+   camera.
+5. **Cloud configuration is the hard part of serverless.** The function is about
+   100 lines; making it run required regions allowed by the subscription, managed identities,
+   five role assignments, Event Grid filtering and webhook keys. Each misconfiguration failed
+   silently (no invocations at all), and was diagnosed from platform metrics and logs. Keys
+   were kept out of the code throughout, and three independent filters prevent the
+   recursive triggering the assignment warns about.
+
+For a real SLS, a VM (or a few) suits a known, stable number of cameras; the serverless
+design suits a large or highly variable number of cameras, or night-time operation where most
+frames never need processing, provided the per-image cost is acceptable.
 
 ## References
 
-- Ultralytics YOLOv8: <https://docs.ultralytics.com/models/yolov8/>
-- OpenCV `VideoCapture`: <https://docs.opencv.org/4.x/d8/dfe/classcv_1_1VideoCapture.html>
-- Gaggenau webcams: <https://www.gaggenau.de/webcams.212.htm>
+1. Teaching team, *Practice 1: Cloud Computing Services* and assessment criteria, 2026.
+2. Teaching team, *Documentation: Serverless cloud computing model*, *HPC cloud services* and
+   *Azure Functions with Blob Storage and Event Grid* (Azure documentation 1–3), and the
+   sample code `contador_personas` (`grabber.py`, `index.html`, `script.js`).
+3. Ultralytics, *YOLOv8* and *Predict mode*: <https://docs.ultralytics.com/models/yolov8/>,
+   <https://docs.ultralytics.com/modes/predict/>
+4. OpenCV, *VideoCapture*: <https://docs.opencv.org/4.x/d8/dfe/classcv_1_1VideoCapture.html>
+5. City of Gaggenau, *Webcams*: <https://www.gaggenau.de/webcams.212.htm>
+6. Microsoft, *Azure for Students*: <https://azure.microsoft.com/free/students>
+7. Microsoft, *Virtual machine sizes, B-series*:
+   <https://learn.microsoft.com/azure/virtual-machines/sizes/general-purpose/bv1-series>
+8. Microsoft, *Host a static website in Azure Storage*:
+   <https://learn.microsoft.com/azure/storage/blobs/storage-blob-static-website>
+9. Microsoft, *Azure Functions Flex Consumption plan*:
+   <https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan>
+10. Microsoft, *Tutorial: Trigger Azure Functions on blob containers using an event
+    subscription*: <https://learn.microsoft.com/azure/azure-functions/functions-event-grid-blob-trigger>
+11. Microsoft, *Azure Blob storage trigger for Azure Functions: identity-based connections*:
+    <https://learn.microsoft.com/azure/azure-functions/functions-bindings-storage-blob-trigger>
+12. Microsoft, *Image Analysis 4.0: people detection*:
+    <https://learn.microsoft.com/azure/ai-services/computer-vision/concept-people-detection>
+13. Microsoft, *Azure AI Vision pricing*:
+    <https://azure.microsoft.com/pricing/details/cognitive-services/computer-vision/>
+14. FastAPI: <https://fastapi.tiangolo.com/>; Uvicorn: <https://www.uvicorn.org/>;
+    psutil: <https://psutil.readthedocs.io/>; Chart.js: <https://www.chartjs.org/>
+
+**Source code.** All code, the VM setup script, the Azure guides and the analysis tools are in
+the project repository (`src/smart_lighting`, `functions`, `deploy`, `docs`). The README explains
+how to reproduce every measurement.

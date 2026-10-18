@@ -21,7 +21,9 @@ cloud, to observe the advantages and costs of each model:
 4. **Multiple cameras:** find how many cameras each cloud architecture can handle.
 
 All parts use the same people count (YOLOv8 or Azure AI) and record results in the same CSV
-format, so the architectures can be compared directly.
+format, so the architectures can be compared directly. For each part we measure response time,
+resource use, bandwidth, cost and detection effectiveness. Section 6 describes the optional
+advanced work: sending fewer and smaller images, and counting each person once by tracking.
 
 ## 2. Part 1: Local processing
 
@@ -43,15 +45,20 @@ so we picked a replacement that meets the requirements:
 
 ### Task 1.2 — Capturing one frame every 5 seconds
 
-`camera.read_frame()` uses OpenCV to open the camera URL, read one frame and close the
-connection. `camera.capture()` calls it on a fixed schedule and yields timestamped frames; this
-is the capture process that Parts 2 and 3 reuse. Design decisions:
+`camera.read_frame()` reads one current frame: a still-image camera is downloaded over HTTP
+and decoded, a video stream (MJPEG, HLS) is opened with OpenCV and its first frame read.
+`camera.capture()` calls it on a fixed schedule and yields timestamped frames; this is the
+capture process that Parts 2 and 3 reuse. Design decisions:
 
 - **A new connection for each frame.** A stream that stays open buffers frames while the
   model is busy, so the next frame read would be seconds old. Reconnecting always returns the
   current image. At one frame per 5 s this costs little (≈0.5 s per read in our tests).
-- **One code path for every camera type.** OpenCV (through FFmpeg) reads JPEG snapshots, MJPEG
-  streams and HLS streams, so other cameras can be added in Part 4 by adding a single URL.
+- **Any camera type.** Still images and video streams (MJPEG, HLS) are both supported, so a
+  camera is added by adding its URL to `CAMERAS`.
+- **Only complete images.** The camera rewrites its image every 5 s, and a download that
+  overlaps the rewrite is cut short; it would still decode, into a partly grey frame. Every
+  complete JPEG ends with the marker `FF D9`, so incomplete downloads are rejected (found
+  during Part 3, see its problems table).
 - **Timeouts.** A camera that does not respond fails after 10 s instead of blocking the program.
   That frame is logged and skipped, and capture continues. We do **not** record a count of 0,
   because a camera failure is not the same as an empty street.
@@ -198,11 +205,11 @@ service was running without any manual step. The memory lines confirm the 1 GiB 
    a normal user rather than root. It is still allowed to use port 80
    (`CAP_NET_BIND_SERVICE`).
 
-### Problems encountered
+### Problems encountered (Task 2.1)
 
 | Problem | Solution |
 |---|---|
-| Creating the VM in West Europe failed with `RequestDisallowedByAzure`. | Azure for Students only allows five regions (listed under Policy → Assignments). We used France Central, the closest one. |
+| Creating the VM in West Europe failed with `RequestDisallowedByAzure`. | Azure for Students only allows five regions (listed under Policy → Assignments): France Central, Switzerland North, Austria East, Norway East and Denmark East. We tried France Central first, the closest. |
 | Neither Standard_B1s nor Standard_B2ats_v2 was available in France Central, the closest allowed region. | B2ats_v2 was available in Austria East. It is B1s's current-generation successor, with the same 1 GiB of RAM, and is also free for students (750 h/month; list price $0.0108/h). |
 | Another `ssh` (from an MSYS2 toolkit) came first on the laptop's PATH, so the key was created in the wrong place. | Moved the key to `%USERPROFILE%\.ssh` and called Windows' own OpenSSH explicitly. |
 
@@ -315,8 +322,9 @@ with one camera: about 3 % CPU and 271 MiB of the 1 GiB still available, matchin
 - **Response time.** A frame is answered in about half a second: ≈ 0.3 s of inference plus
   ≈ 0.2 s of network transfer (170 kB from Spain to Austria) and HTTP handling. That is far
   below the 5-second interval, so for a lighting controller the VM reacts in real time. The
-  first frame was slower (1.5 s) because Linux had moved part of the idle model to swap;
-  occasional peaks of 1–2.5 s have the same cause or come from the home connection.
+  first frame was slower (1.5 s), most likely because Linux had moved part of the idle model to
+  swap; the occasional peaks of 1–2.5 s probably have the same cause or come from the
+  laptop's internet connection.
 - **CPU.** One inference uses about 0.3 s of one core every 5 s, so the 2-vCPU VM is about
   3 % busy. Almost all of its capacity is unused with one camera; Part 4 measures how many
   cameras it can take.
@@ -451,8 +459,8 @@ teaching team's guide.
 ### Task 3.4 — Azure AI Vision service
 
 We created a **Computer Vision** resource `smart-lighting-vision-mb` in France Central with the
-**Standard S1** tier. The free F0 tier allows only 20 images per minute, a tenth of what
-one camera at 0.5 s sends. Its endpoint and key are stored as app settings of the function
+**Standard S1** tier. The free F0 tier allows only 20 images per minute, a sixth of the
+120 that one camera at 0.5 s sends. Its endpoint and key are stored as app settings of the function
 (`VISION_ENDPOINT`, `VISION_KEY`), not in the code. The teaching team's guide suggests Azure
 Key Vault for production; app settings are encrypted at rest and enough for this practice.
 
@@ -486,7 +494,7 @@ the latest frame with the people boxed by the function.*
 
 *Figure: invocations of `ProcessFrame`: all successful, each taking 0.25–0.41 s.*
 
-### Problems encountered
+### Problems encountered (Tasks 3.2–3.5)
 
 | Problem | Cause and solution |
 |---|---|
@@ -551,9 +559,9 @@ YOLOv8n never reported a person that was not there, but it missed almost half of
 mostly small, distant or partly hidden ones (Task 1.2 showed it misses even more at 640 px).
 Azure AI found nearly everyone but repeatedly took one static object for a person. **For a
 lighting controller, a missed person is worse than a false one**: a missed person means
-walking in the dark, while a false one only wastes some energy. Azure AI never missed a frame
-with people in it, and its static false positive could be removed by ignoring a fixed area or
-detections that never move. The sample is small (12 frames, 9 people, one cloudy afternoon),
+walking in the dark, while a false one only wastes some energy. Azure AI detected something in
+every frame with people (in one of them, frame 13, only because of its false detection), and its
+static false positive could be removed by ignoring a fixed area or detections that never move. The sample is small (12 frames, 9 people, one cloudy afternoon),
 so these figures indicate a tendency rather than precise rates.
 
 **Cost** (list prices; per frame):
@@ -624,7 +632,7 @@ Throughput follows the offered load (dashed) up to 16 cameras and then collapses
 
 **The limit is 16 cameras.** Up to 16 cameras every frame was answered in about 0.6 s, and the
 response time did not grow with the load. At 24 cameras the system collapsed: only 14 % of
-the frames got an answer, after 27 s on average.
+the frames got an answer, after a median of 27 s.
 
 **Why exactly there.** The VM runs one inference at a time, and one inference takes
 0.29 s. The most it can process is therefore 1 / 0.29 ≈ 3.4 frames/s, which is
@@ -641,8 +649,9 @@ time but keeps up. With 24 cameras (4.8 frames/s) more frames arrive than leave:
 
 The CPU never reached 100 % before the limit. With 2 vCPUs and inferences run one at a time,
 the model's speed sets the limit, and memory turns overload into collapse. The service did
-not crash: after the test it was still running and had never been restarted (`NRestarts=0`). The VM is thus a fixed-capacity system. To serve more cameras one must buy a larger
-VM or more VMs (*scale up / scale out*), or make inference cheaper, e.g. at 640 px at the cost
+not crash: after the test it was still running and had never been restarted
+(`NRestarts=0`). The VM is thus a fixed-capacity system. To serve more cameras one must buy a
+larger VM or more VMs (*scale up / scale out*), or make inference cheaper, e.g. at 640 px at the cost
 of missed people (Task 1.2).
 
 **A confounding event.** At 14:34, during the 24-camera step, Ubuntu's automatic security
@@ -692,8 +701,8 @@ once its result is stored in `$web`.
 always equals the offered load; latency is flat up to 64 cameras and grows from 96.*
 
 **Practically every frame was processed at every level**: 9,335 of 9,336 (one frame of the
-128-camera step was missing when we collected the results). Up to 64 cameras the latency did not change at all (≈ 1.2 s): Flex
-Consumption started more function instances as frames arrived, so each frame was processed
+128-camera step was missing when we collected the results). Up to 64 cameras the latency
+did not change at all (≈ 1.2 s): Flex Consumption started more function instances as frames arrived, so each frame was processed
 in parallel with the others instead of waiting in line. This is the serverless promise of
 automatic scale-out, and it is visible in the flat line.
 
@@ -701,11 +710,17 @@ automatic scale-out, and it is visible in the flat line.
 128 cameras to 5.6 s (p95 12.8 s): a camera's result then arrives after its next frame, and
 work queues up. We define that as the processing limit for a lighting controller. Unlike
 the VM, the system did not collapse: frames waited and were all eventually processed. What
-saturates is outside our code: the rate at which AI Vision S1 accepts requests (the SDK
-retries throttled calls automatically, which adds delay) and the speed at which Flex
-Consumption adds instances. Both limits can be raised (a higher AI quota, more maximum
-instances) without changing the code. The laptop was not the bottleneck: uploads stayed at
+saturates is outside our code. We could not observe it directly; the two likely candidates are
+the request rate AI Vision S1 accepts (the SDK retries throttled requests automatically, which
+adds delay) and the speed at which Flex Consumption adds instances. Both can be raised (a higher
+AI quota, more maximum instances) without changing the code. The laptop was not the bottleneck: uploads stayed at
 ≈ 50 ms even at 32 Mbit/s.
+
+**Detection effectiveness under load.** Every frame is analysed by the same service with the
+same settings, so its effectiveness per frame is that of Task 3.6 (89 % of people found) at
+any number of cameras; and because practically every frame was processed, no detections were
+lost under load. The VM is the opposite: beyond 16 cameras 86–98 % of the frames were never
+analysed, so for those cameras the lighting controller would effectively be blind.
 
 **Cost at the limit.** At 128 cameras (25.6 frames/s) AI Vision costs about $92 per hour at list
 price, against ≈ $0.019 per hour for the VM. The load test itself used ≈ 9,000 images.
@@ -724,14 +739,16 @@ cameras, for both architectures. The dashed line is the 5 s between two frames o
 | Behaviour under overload | queue → memory → swap → slower inference → collapse | queue → higher latency, eventually processed |
 | Scaling | manual: a bigger VM or more VMs | automatic scale-out |
 | Detection (Task 3.6) | 56 % of people found, no false detections | 89 % found, some static false detections |
-| Cost | fixed ≈ $0.019 / h, any load | ≈ $0.001 per frame (≈ $0.72 per camera-hour) |
+| Detection under overload | lost: most frames never analysed | kept: every frame analysed, later |
+| Cost | fixed ≈ $0.019 / h, any load (≈ $0.0012 per camera-hour at 16 cameras) | ≈ $0.001 per frame (≈ $0.72 per camera-hour) |
 | Cost when idle | same as under load | nothing |
 | Operation | we patch the OS, manage memory, open ports | none: the platform runs it |
 
 The two architectures trade **cost** against **elasticity**. For a fixed, known number of
 cameras that fits one machine, the VM is much faster and cheaper per frame. The serverless
-design costs about 40 times more per camera at full load, but scales on its own to ~6 times
-as many cameras, never drops frames, and costs nothing at night when cameras send nothing.
+design costs about 40 times more for a single camera, and about 600 times more per camera once
+the VM is fully used (16 cameras), but it scales on its own to ~6 times as many cameras,
+practically never loses a frame, and costs nothing at night when cameras send nothing.
 In a real SLS the deciding factors would be the number of cameras and how variable the load
 is.
 
@@ -797,7 +814,8 @@ number of people counts as found).
 Down to about 40–60 kB per frame, detection does not change beyond ±1 person in the sample;
 at 640 px with quality ≤ 70 both detectors lose people (Azure AI 56–78 %, YOLOv8 33 %), and
 strong compression (quality 50) adds false detections. **960 px at quality 70 is the best
-compromise: 56 kB instead of 156 kB (−64 % bandwidth and storage) with the same detection.**
+compromise: 56 kB instead of 156 kB (−64 % bandwidth and storage) with the same detection
+within the noise of the sample.**
 With only 9 people in 12 frames, differences of one person (11 %) are within noise; the
 trend at the low end is the reliable result.
 
@@ -834,14 +852,14 @@ rates to measure how much frame rate tracking needs:
 At 10 frames/s YOLOv8 makes 4,341 person detections in the 795 frames, which the tracker
 links to **35 people**: summing per-frame counts would count each person ≈ 124 times. At
 lower rates the result becomes unreliable: at 5 frames/s people get new IDs after small jumps
-(48), at 1 frame/s and below tracks are never confirmed (15, then 3). The 35 at full rate is
+(48), at 1 frame/s and below most tracks are never confirmed (15, then 3). The 35 at full rate is
 an estimate: we did not verify every track by hand, and crowded crossings can still swap IDs.
 
 **Conclusion.** Counting unique people needs **a video stream of at least ≈ 5–10 frames per
 second**, not a still image every 5 s. That much video is best processed close to the camera
 (an edge device or the local machine), sending only counts to the cloud: at 10 frames/s a
-1280 × 720 stream would mean 50 times more frames per camera than the one frame every 5 s our cloud designs were sized for. The
-capture code already reads MJPEG/HLS streams, so the system can use such a camera directly.
+1280 × 720 stream would mean 50 times more frames per camera than the one frame every 5 s
+our cloud designs were sized for. The capture code already reads MJPEG/HLS streams, so the system can use such a camera directly.
 
 ## 7. Conclusions
 
@@ -865,8 +883,8 @@ throughout, so the measurements are directly comparable. The work supports these
 3. **Serverless trades cost for elasticity.** The function scaled out by itself: up to
    64 cameras its latency stayed at ≈ 1.2 s, and even at 128 cameras practically every frame
    was processed, only later. Each frame, however, passes through several services (≈ 1.3 s
-   in total), and Azure AI costs ≈ $0.001 per image, about 40 times more per camera than the
-   VM at full load. In return it costs nothing when no frames arrive and needs no operating
+   in total), and Azure AI costs ≈ $0.001 per image: about 40 times the VM's cost for one camera,
+   and about 600 times per camera when the VM is fully used. In return it costs nothing when no frames arrive and needs no operating
    system, patching or capacity planning.
 4. **The managed AI service detected people better, but not perfectly.** On the same images
    Azure AI found 89 % of the people against YOLOv8n's 56 %, at the price of a recurring false
@@ -875,11 +893,10 @@ throughout, so the measurements are directly comparable. The work supports these
    camera.
 5. **Cloud configuration is the hard part of serverless.** The function is about
    100 lines; making it run required regions allowed by the subscription, managed identities,
-   five role assignments, Event Grid filtering and webhook keys. Each misconfiguration failed
+   seven role assignments, Event Grid filtering and webhook keys. Each misconfiguration failed
    silently (no invocations at all), and was diagnosed from platform metrics and logs. Keys
    were kept out of the code throughout, and three independent filters prevent the
    recursive triggering the assignment warns about.
-
 6. **Sending less data is the cheapest optimisation.** Skipping unchanged frames on the
    laptop removed 88–94 % of the uploads and AI calls without changing any count, and 960 px
    images at JPEG quality 70 cut each upload by 64 % with the same detection. Counting each
@@ -904,5 +921,6 @@ frames never need processing, provided the per-image cost is acceptable.
 5. OpenCV `vtest.avi` sample video: <https://github.com/opencv/opencv/tree/4.x/samples/data>
 
 **Source code.** All code, the VM setup script, the Azure guides and the analysis tools are in
-the project repository, <https://github.com/botezatumarius/azure-smart-lighting> (`src/smart_lighting`, `functions`, `deploy`, `docs`). The README explains
-how to reproduce every measurement.
+the project repository, <https://github.com/botezatumarius/azure-smart-lighting>
+(`src/smart_lighting`, `functions`, `deploy`, `docs`). The README explains how to reproduce
+every measurement.

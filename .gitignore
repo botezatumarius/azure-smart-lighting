@@ -23,3 +23,6 @@ local.settings.json
 /*.pdf
 /contador_personas.zip
 /contador_personas/
+
+# Built report
+docs/report.pdf

@@ -12,7 +12,7 @@ dependencies = ["ultralytics>=8.3,<9", "matplotlib>=3.8", "requests>=2.31"]
 [project.optional-dependencies]
 vm = ["fastapi>=0.115", "uvicorn>=0.30", "psutil>=5.9"]
 azure = ["azure-storage-blob>=12.19", "azure-ai-vision-imageanalysis>=1.0"]
-dev = ["smart-lighting[vm,azure]", "pytest>=8", "ruff>=0.6", "httpx2"]
+dev = ["smart-lighting[vm,azure]", "pytest>=8", "ruff>=0.6", "httpx2", "markdown>=3.5"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

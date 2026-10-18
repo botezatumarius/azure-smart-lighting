@@ -11,7 +11,9 @@ import markdown
 DOCS = Path(__file__).parent
 CHROME = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
 STYLE = """
-@page { size: A4; margin: 18mm 16mm; }
+@page { size: A4; margin: 18mm 16mm;
+        @bottom-center { content: counter(page) " / " counter(pages); font-size: 8.5pt;
+                         color: #777; } }
 body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10.5pt; line-height: 1.45;
        color: #1d2433; }
 h1 { font-size: 20pt; margin: 0 0 6pt; }
@@ -30,13 +32,22 @@ pre code { background: none; padding: 0; }
 img { max-width: 100%; max-height: 120mm; display: block; margin: 8pt auto 2pt;
       border: 1px solid #e3e6eb; }
 .caption { font-size: 9pt; color: #555; text-align: center; break-before: avoid; }
+.toc { margin: 10pt 0 4pt; }
+.toc ul { list-style: none; padding-left: 0; margin: 2pt 0; }
+.toc a { color: inherit; text-decoration: none; }
 """
 
 
 def main() -> None:
-    body = markdown.markdown(
-        (DOCS / "report.md").read_text(encoding="utf-8"), extensions=["tables", "fenced_code"]
-    ).replace("<p><em>Figure:", '<p class="caption"><em>Figure:')
+    converter = markdown.Markdown(
+        extensions=["tables", "fenced_code", "toc"], extension_configs={"toc": {"toc_depth": "2-2"}}
+    )
+    body = converter.convert((DOCS / "report.md").read_text(encoding="utf-8"))
+    body = body.replace("<p><em>Figure:", '<p class="caption"><em>Figure:')
+    # Contents after the title block.
+    first_section = body.index("<h2")
+    contents = f"<p><strong>Contents</strong></p>{converter.toc}"
+    body = body[:first_section] + contents + body[first_section:]
     html = DOCS / "report.html"
     html.write_text(
         f'<!doctype html><html><head><meta charset="utf-8"><style>{STYLE}</style></head>'

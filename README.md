@@ -88,6 +88,14 @@ Each simulated camera sends the real camera's latest frame every 5 s. The result
 summarised and plotted with `smart_lighting.analysis`; `smart_lighting.compare` runs YOLOv8 and
 Azure AI on the same images to measure detection effectiveness.
 
+## Advanced work
+
+```powershell
+.venv\Scripts\python -m smart_lighting.uploader --frames 240 --only-changes   # motion filter
+.venv\Scripts\python -m smart_lighting.compare --sweep                       # resolution / JPEG quality
+.venv\Scripts\python -m smart_lighting.tracking data/vtest.avi               # unique people
+```
+
 ## Development
 
 ```powershell
@@ -111,6 +119,7 @@ src/smart_lighting/
   loadtest.py   Part 4: simulate N cameras
   analysis.py   performance tables and graphs
   compare.py    YOLOv8 vs Azure AI on the same images
+  tracking.py   advanced: count unique people by tracking (ByteTrack)
   web/          dashboard page (VM and static website)
 functions/      Part 3: Azure Function (blob trigger → Azure AI Vision)
 deploy/         VM setup script and systemd service

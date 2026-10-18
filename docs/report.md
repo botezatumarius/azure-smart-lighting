@@ -734,7 +734,115 @@ as many cameras, never drops frames, and costs nothing at night when cameras sen
 In a real SLS the deciding factors would be the number of cameras and how variable the load
 is.
 
-## 6. Conclusions
+## 6. Advanced work
+
+We chose the improvements our measurements pointed to: the serverless design pays per image
+and uploads full frames, so **sending fewer and smaller images** saves money and bandwidth
+directly (advanced item 3). We also investigated **counting each person once** (item 1).
+Item 2 (vehicles) was not done: the camera overlooks a pedestrian zone with no traffic to
+count. The detector would only need the COCO vehicle classes added to `classes=`.
+
+### 6.1 Motion detection on the laptop: send only frames that changed
+
+**Idea.** The camera publishes a new image only every 5 s, so at Part 3's 0.5 s rate nine of
+ten uploads repeat the last image. Even after a refresh, an empty square looks the same. A
+frame in which nothing changed cannot change the people count, so it need not be sent: the
+controller keeps the last count.
+
+**Method.** `camera.ChangeFilter` compares each frame with the last frame sent, on small
+(320 × 180) blurred grey copies. A pixel counts as changed if its brightness moved by more
+than 25 levels (of 255), and the frame is sent if at least **20 pixels** changed. We chose
+the threshold from the Part 3 frames: 203 of 233 consecutive pairs changed by 0 pixels (no
+camera refresh), a refresh with only camera noise changed 4–13 pixels, and a walking person
+changed 60–540. A **heartbeat** sends at least one frame per minute anyway, so an error,
+for example a person standing perfectly still, can never last long. The filter is enabled
+with `uploader.py --only-changes`.
+
+**Results.**
+
+| Test | Frames captured | Sent | Skipped | Count errors |
+|---|---|---|---|---|
+| Replay of the Part 3 run (234 complete frames, YOLOv8 on every frame) | 234 | 27 | 207 (88 %) | **0**: every skipped frame had the same count as the last frame sent |
+| Live run, 18 Oct 16:30, 2 min at 0.5 s, to Azure | 231 | 13 | 218 (94 %) | (not measurable live) |
+
+The filter cut uploads, function executions and **AI Vision calls by 88–94 %** with no loss
+of information; at ≈ $0.001 per image this is the same saving in money. The saving depends
+on the scene: at the 5 s rate during busy hours almost every frame changes, while at night
+or on an empty square nearly all frames are skipped, which is exactly when an SLS needs no
+processing.
+
+### 6.2 Minimum resolution and compression that keep detection quality
+
+**Method.** `python -m smart_lighting.compare --sweep` re-sends the 12 hand-counted frames
+(Task 3.6) at 3 widths (1280, 960, 640 px) × 3 JPEG qualities (90, 70, 50) to both detectors
+and records the upload size and the people found (count-based: per frame, at most the true
+number of people counts as found).
+
+| Width / quality | kB per frame | YOLOv8 found | Azure AI found | Azure extra detections |
+|---|---|---|---|---|
+| 1280 / 90 (Parts 2–4) | 156 | 56 % | 100 % | 2 |
+| 1280 / 70 | 104 | 44 % | 89 % | 1 |
+| 960 / 90 | 107 | 44 % | 100 % | 2 |
+| **960 / 70** | **56** | 44 % | **89 %** | **0** |
+| 960 / 50 | 41 | 56 % | 100 % | 4 |
+| 640 / 90 | 57 | 44 % | 89 % | 1 |
+| 640 / 70 | 30 | 33 % | 78 % | 1 |
+| 640 / 50 | 22 | 33 % | 56 % | 2 |
+
+![Image size vs detection](images/advanced-sweep.png)
+
+*Figure: upload size vs people found for both detectors (labels: width / JPEG quality).*
+
+Down to about 40–60 kB per frame, detection does not change beyond ±1 person in the sample;
+at 640 px with quality ≤ 70 both detectors lose people (Azure AI 56–78 %, YOLOv8 33 %), and
+strong compression (quality 50) adds false detections. **960 px at quality 70 is the best
+compromise: 56 kB instead of 156 kB (−64 % bandwidth and storage) with the same detection.**
+With only 9 people in 12 frames, differences of one person (11 %) are within noise; the
+trend at the low end is the reliable result.
+
+**Combined effect.** With 960/70 images and the change filter, a camera at 0.5 s needs
+≈ 6–13 kB/s instead of 306 kB/s on our data (−96 to −98 %), and the AI cost falls by the same 88–94 %
+as the uploads.
+
+### 6.3 Counting each person once: tracking
+
+**Idea.** Summing the per-frame counts counts the same person in every frame in which they
+appear. To count people *passing by*, detections must be linked across frames into one
+track per person. Ultralytics includes the **ByteTrack** tracker (`model.track(persist=True)`),
+which gives every person a stable ID; the number of distinct IDs is the number of people who
+passed.
+
+**Why not on our camera.** Linking works if a person moves only a little between two frames.
+Our camera gives one image every 5 s, in which a pedestrian walks ≈ 7 m: there is nothing to
+link. We therefore tested tracking (`python -m smart_lighting.tracking`) on OpenCV's recorded
+pedestrian video `vtest.avi` (795 frames at 10 frames/s, 80 s), and repeated it at lower frame
+rates to measure how much frame rate tracking needs:
+
+| Frames per second used | Frames | Unique people (track IDs) |
+|---|---|---|
+| **10 (full video)** | 795 | **35** |
+| 5 | 398 | 48 |
+| 2 | 159 | 36 |
+| 1 | 80 | 15 |
+| 0.2 (our camera's rate) | 16 | 3 |
+
+![Tracking with IDs](images/advanced-tracking.jpg)
+
+*Figure: ByteTrack on the recorded video; each person keeps an ID (21, 22) across frames.*
+
+At 10 frames/s YOLOv8 makes 4,341 person detections in the 795 frames, which the tracker
+links to **35 people**: summing per-frame counts would count each person ≈ 124 times. At
+lower rates the result becomes unreliable: at 5 frames/s people get new IDs after small jumps
+(48), at 1 frame/s and below tracks are never confirmed (15, then 3). The 35 at full rate is
+an estimate: we did not verify every track by hand, and crowded crossings can still swap IDs.
+
+**Conclusion.** Counting unique people needs **a video stream of at least ≈ 5–10 frames per
+second**, not a still image every 5 s. That much video is best processed close to the camera
+(an edge device or the local machine), sending only counts to the cloud: at 10 frames/s a
+1280 × 720 stream would mean 50 times more frames per camera than the one frame every 5 s our cloud designs were sized for. The
+capture code already reads MJPEG/HLS streams, so the system can use such a camera directly.
+
+## 7. Conclusions
 
 We built one people-counting pipeline for a Smart Lighting System and ran it on three
 infrastructures: a laptop, an Azure virtual machine, and a serverless design with Azure AI.
@@ -771,37 +879,28 @@ throughout, so the measurements are directly comparable. The work supports these
    were kept out of the code throughout, and three independent filters prevent the
    recursive triggering the assignment warns about.
 
+6. **Sending less data is the cheapest optimisation.** Skipping unchanged frames on the
+   laptop removed 88–94 % of the uploads and AI calls without changing any count, and 960 px
+   images at JPEG quality 70 cut each upload by 64 % with the same detection. Counting each
+   person once, by tracking, works on video at 10 frames/s, but needs far more frames than a
+   still image every 5 s, which argues for processing such video near the camera.
+
 For a real SLS, a VM (or a few) suits a known, stable number of cameras; the serverless
 design suits a large or highly variable number of cameras, or night-time operation where most
 frames never need processing, provided the per-image cost is acceptable.
 
 ## References
 
-1. Teaching team, *Practice 1: Cloud Computing Services* and assessment criteria, 2026.
-2. Teaching team, *Documentation: Serverless cloud computing model*, *HPC cloud services* and
-   *Azure Functions with Blob Storage and Event Grid* (Azure documentation 1–3), and the
-   sample code `contador_personas` (`grabber.py`, `index.html`, `script.js`).
-3. Ultralytics, *YOLOv8* and *Predict mode*: <https://docs.ultralytics.com/models/yolov8/>,
-   <https://docs.ultralytics.com/modes/predict/>
-4. OpenCV, *VideoCapture*: <https://docs.opencv.org/4.x/d8/dfe/classcv_1_1VideoCapture.html>
-5. City of Gaggenau, *Webcams*: <https://www.gaggenau.de/webcams.212.htm>
-6. Microsoft, *Azure for Students*: <https://azure.microsoft.com/free/students>
-7. Microsoft, *Virtual machine sizes, B-series*:
-   <https://learn.microsoft.com/azure/virtual-machines/sizes/general-purpose/bv1-series>
-8. Microsoft, *Host a static website in Azure Storage*:
-   <https://learn.microsoft.com/azure/storage/blobs/storage-blob-static-website>
-9. Microsoft, *Azure Functions Flex Consumption plan*:
-   <https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan>
-10. Microsoft, *Tutorial: Trigger Azure Functions on blob containers using an event
-    subscription*: <https://learn.microsoft.com/azure/azure-functions/functions-event-grid-blob-trigger>
-11. Microsoft, *Azure Blob storage trigger for Azure Functions: identity-based connections*:
-    <https://learn.microsoft.com/azure/azure-functions/functions-bindings-storage-blob-trigger>
-12. Microsoft, *Image Analysis 4.0: people detection*:
-    <https://learn.microsoft.com/azure/ai-services/computer-vision/concept-people-detection>
-13. Microsoft, *Azure AI Vision pricing*:
-    <https://azure.microsoft.com/pricing/details/cognitive-services/computer-vision/>
-14. FastAPI: <https://fastapi.tiangolo.com/>; Uvicorn: <https://www.uvicorn.org/>;
-    psutil: <https://psutil.readthedocs.io/>; Chart.js: <https://www.chartjs.org/>
+1. Teaching team: *Practice 1: Cloud Computing Services*, its assessment criteria, the Azure
+   documentation 1–3 (serverless model, HPC/AI services, Functions with Blob Storage and
+   Event Grid) and the sample code `contador_personas`.
+2. Ultralytics YOLOv8 and tracking: <https://docs.ultralytics.com/models/yolov8/>,
+   <https://docs.ultralytics.com/modes/track/>
+3. Microsoft Azure documentation: static websites in Blob Storage, Flex Consumption plan,
+   event-based blob trigger, identity-based connections, Image Analysis 4.0 people detection
+   and pricing: <https://learn.microsoft.com/azure/>
+4. City of Gaggenau webcam: <https://www.gaggenau.de/webcams.212.htm>
+5. OpenCV `vtest.avi` sample video: <https://github.com/opencv/opencv/tree/4.x/samples/data>
 
 **Source code.** All code, the VM setup script, the Azure guides and the analysis tools are in
 the project repository (`src/smart_lighting`, `functions`, `deploy`, `docs`). The README explains

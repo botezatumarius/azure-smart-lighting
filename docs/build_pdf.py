@@ -1,15 +1,21 @@
-"""Render docs/report.md to docs/report.pdf (Markdown → HTML → headless Chrome).
+"""Render docs/report.md to docs/report.pdf (Markdown → HTML → headless Chrome or Edge).
 
 python docs/build_pdf.py
 """
 
+import shutil
 import subprocess
 from pathlib import Path
 
 import markdown
 
 DOCS = Path(__file__).parent
-CHROME = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+BROWSERS = (
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    "google-chrome",
+    "chromium",
+)
 STYLE = """
 @page { size: A4; margin: 18mm 16mm;
         @bottom-center { content: counter(page) " / " counter(pages); font-size: 8.5pt;
@@ -38,6 +44,15 @@ img { max-width: 100%; max-height: 120mm; display: block; margin: 8pt auto 2pt;
 """
 
 
+def browser() -> str:
+    """The first installed Chromium-based browser (prints the PDF)."""
+    for candidate in BROWSERS:
+        found = shutil.which(candidate) or (candidate if Path(candidate).is_file() else None)
+        if found:
+            return found
+    raise SystemExit("Chrome or Edge is required to build the PDF.")
+
+
 def main() -> None:
     converter = markdown.Markdown(
         extensions=["tables", "fenced_code", "toc"], extension_configs={"toc": {"toc_depth": "2-2"}}
@@ -57,7 +72,7 @@ def main() -> None:
     pdf = DOCS / "report.pdf"
     subprocess.run(
         [
-            str(CHROME),
+            browser(),
             "--headless",
             "--disable-gpu",
             "--no-pdf-header-footer",

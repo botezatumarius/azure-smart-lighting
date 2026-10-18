@@ -1,8 +1,8 @@
 # Practice 1: Cloud Computing Services — Project Report
 
 **Course:** Architectures and Infrastructures for Artificial Intelligence  
-**Authors:** *[group members]*  
-**Date:** *[submission date]*
+**Author:** Marius Botezatu  
+**Date:** 18 October 2026
 
 ## 1. Introduction
 

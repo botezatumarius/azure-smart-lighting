@@ -241,9 +241,10 @@ Design decisions:
    so local and cloud results are directly comparable;
 3. saves the annotated frame and appends a row to `counts.csv`, in the same format as Part 1.
 
-The detector runs one frame at a time (a lock). PyTorch already spreads one inference over
-both vCPUs, so running frames in parallel would not be faster and would need a second copy of
-the working memory, which 1 GiB of RAM cannot afford. Extra frames wait in line, and that
+The detector runs one frame at a time (a lock). One inference keeps about one of the two
+vCPUs busy (Part 4: 49 % CPU with the detector busy 93 % of the time). A second inference in
+parallel could use the other vCPU, but would need a second copy of the model's working memory,
+and memory, not CPU, is this VM's bottleneck (Part 4). Extra frames wait in line, and that
 waiting shows up in the response time. This is the effect we measure in Part 4.
 
 The same frames seen from both sides. On the laptop, `sent.csv` holds the VM's answer plus

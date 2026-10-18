@@ -67,7 +67,7 @@ def process_frame(blob: func.InputStream) -> None:
         storage()
         .get_blob_client("raw", str(path.relative_to("raw")))
         .get_blob_properties()
-        .creation_time
+        .creation_time.replace(tzinfo=UTC)
     )
 
     annotated = draw_boxes(image, boxes)

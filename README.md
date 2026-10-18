@@ -3,16 +3,12 @@
 Practice 1 of **Architectures and Infrastructures for AI**: count people in public webcam
 frames with YOLOv8, first locally and then on Azure.
 
-| Part | Status |
-|---|---|
-| 1 · Local processing | Done |
-| 2 · Azure virtual machine | Code done; Azure deployment pending |
-| 3 · Serverless and Azure AI | To do |
-| 4 · Multi-camera management | To do |
+All four parts are implemented and measured. The report is [docs/report.md](docs/report.md);
+`python docs/build_pdf.py` renders it to `docs/report.pdf` for submission.
 
 ## Setup
 
-Requires Python 3.10+. From the project folder (PowerShell):
+Requires Python 3.11+. From the project folder (PowerShell):
 
 ```powershell
 python -m venv .venv
@@ -69,6 +65,29 @@ using `--server http://127.0.0.1:8000`:
 $env:SMART_LIGHTING_TOKEN = "test"; .venv\Scripts\python -m smart_lighting.vm
 ```
 
+## Part 3: serverless with Azure AI
+
+The laptop uploads frames to the `raw` Blob container; Event Grid triggers the Azure Function
+`ProcessFrame` (`functions/`), which counts people with Azure AI Vision, draws their boxes and
+writes the results to the static website. Follow [docs/azure-serverless.md](docs/azure-serverless.md).
+
+```powershell
+$env:AZURE_STORAGE_CONNECTION_STRING = "<connection string>"
+.venv\Scripts\python -m smart_lighting.uploader --publish-website   # once
+.venv\Scripts\python -m smart_lighting.uploader --frames 240        # one frame every 0.5 s
+```
+
+## Part 4: multiple cameras
+
+```powershell
+.venv\Scripts\python -m smart_lighting.loadtest --target vm --server http://<public-ip> --levels 1 2 4 8 16 24 32
+.venv\Scripts\python -m smart_lighting.loadtest --target blob --levels 1 4 16 32 64 128
+```
+
+Each simulated camera sends the real camera's latest frame every 5 s. The results are
+summarised and plotted with `smart_lighting.analysis`; `smart_lighting.compare` runs YOLOv8 and
+Azure AI on the same images to measure detection effectiveness.
+
 ## Development
 
 ```powershell
@@ -87,7 +106,13 @@ src/smart_lighting/
   sender.py     Part 2: capture → send to VM
   vm.py         Part 2: VM web service (upload API + dashboard)
   monitor.py    Part 2: CPU, memory and network sampling on the VM
-  web/          dashboard page
+  streaming.py  send frames to a cloud target and log each result (Parts 2–4)
+  uploader.py   Part 3: capture → upload to Blob Storage; publish the website
+  loadtest.py   Part 4: simulate N cameras
+  analysis.py   performance tables and graphs
+  compare.py    YOLOv8 vs Azure AI on the same images
+  web/          dashboard page (VM and static website)
+functions/      Part 3: Azure Function (blob trigger → Azure AI Vision)
 deploy/         VM setup script and systemd service
-docs/           report draft and Azure guide
+docs/           report, Azure guides, PDF build
 ```

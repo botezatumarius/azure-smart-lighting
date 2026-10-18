@@ -26,3 +26,7 @@ local.settings.json
 
 # Built report
 docs/report.pdf
+
+# Editor files created by the Azure Functions extension (keep only the deploy settings)
+functions/.vscode/*
+!functions/.vscode/settings.json

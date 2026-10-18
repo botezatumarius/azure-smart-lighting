@@ -4,7 +4,7 @@ Practice 1 of **Architectures and Infrastructures for AI**: count people in publ
 frames with YOLOv8, first locally and then on Azure.
 
 All four parts are implemented and measured. The report is [docs/report.md](docs/report.md);
-`python docs/build_pdf.py` renders it to `docs/report.pdf` for submission.
+`python docs/build_pdf.py` renders it to `docs/report-Marius Botezatu.pdf` for submission.
 The measurement data behind it is in [results/](results/README.md).
 
 ## Setup

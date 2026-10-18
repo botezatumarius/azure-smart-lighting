@@ -25,7 +25,7 @@ local.settings.json
 /contador_personas/
 
 # Built report
-docs/report.pdf
+docs/*.pdf
 
 # Editor files created by the Azure Functions extension (keep only the deploy settings)
 functions/.vscode/*

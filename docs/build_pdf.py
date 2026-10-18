@@ -1,4 +1,4 @@
-"""Render docs/report.md to docs/report.pdf (Markdown → HTML → headless Chrome or Edge).
+"""Render docs/report.md to the submission PDF (Markdown → HTML → headless Chrome or Edge).
 
 python docs/build_pdf.py
 """
@@ -69,7 +69,7 @@ def main() -> None:
         f"<body>{body}</body></html>",
         encoding="utf-8",
     )
-    pdf = DOCS / "report.pdf"
+    pdf = DOCS / "report-Marius Botezatu.pdf"
     subprocess.run(
         [
             browser(),

@@ -75,7 +75,8 @@ are missed. We compared both sizes on the same frame, which had 8 people visible
 | 640 px (YOLO default) | 2 | 0.67 (30 frames, 14:20–14:23) |
 | **1280 px (native)** | **7** | **2.56** (59 frames, 14:23–14:28) |
 
-The two live runs followed each other on the same afternoon, so they saw similar crowds.
+The same-frame comparison is the controlled test. The two live runs were taken back to back
+the same afternoon; as the crowd changes from minute to minute, their means only confirm the trend.
 
 Detecting at the native 1280 px finds 3–4 times more people, so all parts use 1280 px. This
 makes inference slower (≈400 ms instead of ≈160 ms per frame on the laptop), which is still far
@@ -87,7 +88,7 @@ is not given a smaller copy of it.
 `detector.PersonDetector` loads the pretrained **YOLOv8n** model (the smallest YOLOv8, suited to
 CPU-only machines and later to a small VM). For each frame it:
 
-1. runs YOLOv8 restricted to COCO class 0 (*person*) with confidence ≥ 0.5, the same threshold
+1. runs YOLOv8 restricted to COCO class 0 (*person*) with confidence above 0.5, the same threshold
    as the teaching team's sample;
 2. counts the returned boxes;
 3. returns the count, an image with the boxes drawn on it, and the inference time in ms.
@@ -236,7 +237,7 @@ Design decisions:
 `vm.py` is a small **FastAPI** web service. For each uploaded frame it:
 
 1. checks the token, and checks that the body is a valid image;
-2. runs **the same `PersonDetector` as Part 1** (YOLOv8n, class *person*, confidence ≥ 0.5),
+2. runs **the same `PersonDetector` as Part 1** (YOLOv8n, class *person*, confidence above 0.5),
    so local and cloud results are directly comparable;
 3. saves the annotated frame and appends a row to `counts.csv`, in the same format as Part 1.
 
@@ -602,7 +603,7 @@ the cameras with `loadtest.py`:
   8-camera step), so every result can be traced to its step;
 - the real Gaggenau camera is read once every 5 s and **every simulated camera sends that
   real, current frame**. The cloud therefore receives exactly the traffic of N real cameras:
-  N real 1280 × 720 frames (≈ 165 kB each) every 5 s. The public camera's server, however,
+  N real 1280 × 720 frames (≈ 140–170 kB each) every 5 s. The public camera's server, however,
   still receives only one request every 5 s;
 - the cameras are **spread evenly over the 5 s** (camera *i* starts at *i* × 5/N s), as
   independent real cameras would be, rather than all sending at the same instant;

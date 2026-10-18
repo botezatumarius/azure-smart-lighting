@@ -84,6 +84,47 @@ def capture(
         yield datetime.now().astimezone(), frame
 
 
+class ChangeFilter:
+    """Pass a frame on only if the scene changed since the last frame passed on.
+
+    Frames are compared as small, blurred grey copies: a pixel counts as changed if its
+    brightness moved by more than `delta` levels. Camera noise changes a handful of pixels,
+    a walking person dozens to hundreds. A frame is also passed at least every `heartbeat`
+    seconds, so a wrong result (e.g. a person standing still) never persists for long.
+    """
+
+    def __init__(self, min_pixels: int = 20, delta: int = 25, heartbeat: float = 60.0):
+        self.min_pixels = min_pixels
+        self.delta = delta
+        self.heartbeat = heartbeat
+        self.passed = self.skipped = 0
+        self._last: np.ndarray | None = None
+        self._last_time: datetime | None = None
+
+    def __call__(
+        self, frames: Iterator[tuple[datetime, np.ndarray]]
+    ) -> Iterator[tuple[datetime, np.ndarray]]:
+        for timestamp, frame in frames:
+            small = cv2.GaussianBlur(
+                cv2.cvtColor(
+                    cv2.resize(frame, (320, 180), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2GRAY
+                ),
+                (3, 3),
+                0,
+            )
+            if self._unchanged(small, timestamp):
+                self.skipped += 1
+                continue
+            self._last, self._last_time = small, timestamp
+            self.passed += 1
+            yield timestamp, frame
+
+    def _unchanged(self, small: np.ndarray, timestamp: datetime) -> bool:
+        if self._last is None or (timestamp - self._last_time).total_seconds() >= self.heartbeat:
+            return False
+        return int((cv2.absdiff(small, self._last) > self.delta).sum()) < self.min_pixels
+
+
 def to_jpeg(frame: np.ndarray, quality: int = 90) -> bytes:
     """Compress a frame for upload to the cloud."""
     ok, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])

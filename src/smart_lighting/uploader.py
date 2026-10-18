@@ -13,7 +13,7 @@ from pathlib import Path
 from azure.core.exceptions import AzureError
 from azure.storage.blob import BlobServiceClient, ContentSettings
 
-from smart_lighting.camera import CAMERAS, capture
+from smart_lighting.camera import CAMERAS, ChangeFilter, capture
 from smart_lighting.results import COUNT_FIELDS, CsvLog
 from smart_lighting.streaming import SENT_FIELDS, stream
 
@@ -73,6 +73,9 @@ def main() -> None:
     parser.add_argument("--interval", type=float, default=0.5, help="seconds between frames")
     parser.add_argument("--frames", type=int, help="stop after N frames (default: until Ctrl+C)")
     parser.add_argument("--output", type=Path, help="log folder (default: runs/upload-<camera>)")
+    parser.add_argument(
+        "--only-changes", action="store_true", help="skip frames in which nothing changed"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
@@ -84,15 +87,18 @@ def main() -> None:
     output = args.output or Path("runs") / f"upload-{args.camera}"
     output.mkdir(parents=True, exist_ok=True)
     sent = CsvLog(output / "sent.csv", SENT_FIELDS)
+    frames = capture(CAMERAS[args.camera], args.interval, args.frames)
+    changes = ChangeFilter()
     try:
         stream(
-            capture(CAMERAS[args.camera], args.interval, args.frames),
-            BlobTarget(service),
-            args.camera,
-            sent,
+            changes(frames) if args.only_changes else frames, BlobTarget(service), args.camera, sent
         )
     except KeyboardInterrupt:
         logging.info("Stopped by user")
+    if args.only_changes:
+        logging.info(
+            "Change filter: %d frames sent, %d unchanged skipped", changes.passed, changes.skipped
+        )
 
 
 if __name__ == "__main__":

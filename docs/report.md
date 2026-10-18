@@ -543,7 +543,18 @@ of a scaled-to-zero app adds a few seconds to the first frame.
 a manual count. From the frames uploaded in Part 3 we took the 26 distinct, complete images,
 ran **both detectors on the same images** (`python -m smart_lighting.compare`: YOLOv8 at
 1280 px, as on the VM, and Azure AI Vision, as in the function), and counted the people by eye
-in an evenly spread sample of 12 frames (`runs/compare/ground-truth.csv`).
+in an evenly spread sample of 12 frames (every third complete frame):
+
+| Frame | 01, 04, 07, 10, 28, 35 | 13 | 16 | 19 | 22 | 24 | 31 |
+|---|---|---|---|---|---|---|---|
+| People (counted by eye) | 0 | 1 | 1 | 2 | 3 | 2 | 0 |
+| YOLOv8n | 0 | 0 | 0 | 2 | 2 | 1 | 0 |
+| Azure AI | 0 | 1 | 2 | 2 | 3 | 2 | 1 |
+
+In frame 13 Azure AI's single detection is the flower planter, not the person; in frames 16
+and 31 the planter is its extra detection. YOLOv8n's misses are small, distant people, a
+person pushing a bicycle (24), and two people walking side by side counted as one (22).
+Summary:
 
 | 12 frames, 9 people | YOLOv8n (VM) | Azure AI Vision (serverless) |
 |---|---|---|
